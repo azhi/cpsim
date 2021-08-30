@@ -7,6 +7,9 @@ defmodule CPSIM.CP.Actions do
     module_state
     |> Map.from_struct()
     |> Map.take([:status, :queue, :instruction_pointer, :started_transaction_id, :started_transaction_connector])
+    |> Map.update!(:instruction_pointer, fn {batch_ind, action_ind} ->
+      %{batch_ind: batch_ind, action_ind: action_ind}
+    end)
   end
 
   def enqueue_action_batch(name, %Batch{actions: actions} = action_batch)

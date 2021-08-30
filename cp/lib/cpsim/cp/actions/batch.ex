@@ -1,4 +1,5 @@
 defmodule CPSIM.CP.Actions.Batch do
+  @derive {Jason.Encoder, only: [:actions]}
   defstruct [:actions]
 
   use Accessible

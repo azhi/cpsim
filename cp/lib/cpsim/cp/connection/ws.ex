@@ -4,7 +4,11 @@ defmodule CPSIM.CP.Connection.WS do
   def start_link(opts) do
     url = Keyword.fetch!(opts, :url)
     parent = Keyword.fetch!(opts, :parent)
-    WebSockex.start_link(url, __MODULE__, %{parent: parent}, async: true, handle_initial_conn_failure: true)
+
+    WebSockex.start_link(url, __MODULE__, %{parent: parent, monitor_ref: nil},
+      async: true,
+      handle_initial_conn_failure: true
+    )
   end
 
   def stop(pid) do
@@ -16,6 +20,7 @@ defmodule CPSIM.CP.Connection.WS do
   end
 
   def handle_connect(conn, state) do
+    state = maybe_monitor_parent(state)
     send(state.parent, {CPSIM.CP.Connection, :established, conn})
     {:ok, state}
   end
@@ -62,4 +67,11 @@ defmodule CPSIM.CP.Connection.WS do
       {:close, close_frame} -> {:close, close_frame, state}
     end
   end
+
+  def handle_info({:DOWN, _ref, :process, pid, reason}, %{parent: pid} = state) do
+    {:stop, reason, state}
+  end
+
+  defp maybe_monitor_parent(%{monitor_ref: nil} = state), do: %{state | monitor_ref: Process.monitor(state.parent)}
+  defp maybe_monitor_parent(state), do: state
 end

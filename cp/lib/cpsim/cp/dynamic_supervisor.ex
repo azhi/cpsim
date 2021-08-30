@@ -17,6 +17,18 @@ defmodule CPSIM.CP.DynamicSupervisor do
     DynamicSupervisor.start_child(__MODULE__, {CPSIM.CP, opts})
   end
 
+  def list() do
+    DynamicSupervisor.which_children(__MODULE__)
+    |> Enum.map(fn
+      {_, :restarting, _, _} ->
+        nil
+
+      {_, pid, _, _} ->
+        CPSIM.CP.Core.get_state(pid)
+    end)
+    |> Enum.filter(& &1)
+  end
+
   def via(identity) do
     {:via, Registry, {CPSIM.CP.Registry, identity}}
   end

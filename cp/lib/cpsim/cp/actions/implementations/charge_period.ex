@@ -1,6 +1,9 @@
 defmodule CPSIM.CP.Actions.Implementations.ChargePeriod do
   alias CPSIM.CP.Actions.Action
 
+  @speedup_methods ~w[increase_power time_dilation]a
+  def speedup_methods, do: @speedup_methods
+
   def perform(%Action{type: :charge_period, config: config, status: :in_progress} = action, state) do
     power_offered = Enum.min([config.vehicle_power_capacity, state.internal_config.power_limit])
 
@@ -10,7 +13,7 @@ defmodule CPSIM.CP.Actions.Implementations.ChargePeriod do
       period_left: config.period,
       vehicle_charge: config.initial_vehicle_charge,
       power: power_offered,
-      speedup_increased_power: power_offered * maybe_speedup_power(action.config),
+      speedup_increased_power: power_offered * maybe_speedup_power(config),
       power_offered: power_offered
     }
 

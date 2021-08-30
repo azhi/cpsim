@@ -2,6 +2,7 @@ defmodule CPSIM.CP do
   import CPSIM.CP.DynamicSupervisor, only: [via: 1]
 
   defdelegate launch(opts), to: CPSIM.CP.DynamicSupervisor
+  defdelegate list(), to: CPSIM.CP.DynamicSupervisor
 
   defdelegate start_link(opts), to: CPSIM.CP.Core
   defdelegate child_spec(opts), to: CPSIM.CP.Core

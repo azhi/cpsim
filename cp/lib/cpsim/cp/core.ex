@@ -1,5 +1,5 @@
 defmodule CPSIM.CP.Core do
-  use GenServer
+  use GenServer, restart: :transient
 
   alias CPSIM.CP.{InternalConfig, OCPPConfig, Actions, Commands, Connection, Heartbeat, Status}
 
@@ -39,8 +39,13 @@ defmodule CPSIM.CP.Core do
     response_state =
       @modules
       |> Enum.reduce(state, fn module, state ->
-        update_in(state, [:modules, module, :state], &module.format_response_state/1)
+        state
+        |> update_in([:modules, module, :config], &Map.from_struct/1)
+        |> update_in([:modules, module, :state], &module.format_response_state/1)
       end)
+      |> update_in([:internal_config], &Map.from_struct/1)
+      |> update_in([:ocpp_config], &Map.from_struct/1)
+      |> update_in([:ocpp_config, :items, Access.all()], &Map.from_struct/1)
 
     {:reply, response_state, state}
   end

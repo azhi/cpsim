@@ -17,7 +17,7 @@ defmodule CPSIM.CP.Commands do
           |> CallError.encode()
           |> Jason.encode!()
 
-        {:reply, reply, state}
+        {{:reply, reply}, state}
 
       {:error, {:disabled, action}} ->
         reply =
@@ -25,7 +25,7 @@ defmodule CPSIM.CP.Commands do
           |> CallError.encode()
           |> Jason.encode!()
 
-        {:reply, reply, state}
+        {{:reply, reply}, state}
     end
   end
 
