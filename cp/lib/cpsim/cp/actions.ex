@@ -3,15 +3,6 @@ defmodule CPSIM.CP.Actions do
 
   defguardp enabled?(state) when is_map_key(state.modules, __MODULE__)
 
-  def format_response_state(module_state) do
-    module_state
-    |> Map.from_struct()
-    |> Map.take([:status, :queue, :instruction_pointer, :started_transaction_id, :started_transaction_connector])
-    |> Map.update!(:instruction_pointer, fn {batch_ind, action_ind} ->
-      %{batch_ind: batch_ind, action_ind: action_ind}
-    end)
-  end
-
   def enqueue_action_batch(name, %Batch{actions: actions} = action_batch)
       when is_list(actions) and length(actions) > 0 do
     GenServer.call(name, {__MODULE__, :enqueue_action_batch, action_batch})

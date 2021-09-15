@@ -36,4 +36,12 @@ defmodule CPSIM.CP.Status.State do
         Enum.map(config.initial_connector_statuses, fn {c, _s} -> {c, nil} end) |> Enum.into(%{})
     }
   end
+
+  def format_response(state) do
+    state
+    |> Map.from_struct()
+    |> Map.take([:status, :status_reported_at, :connector_statuses, :connector_statuses_reported_at])
+    |> Map.update!(:connector_statuses_reported_at, &Enum.map(&1, fn {_ind, value} -> value end))
+    |> Map.update!(:connector_statuses, &Enum.map(&1, fn {_ind, value} -> value end))
+  end
 end

@@ -1,12 +1,6 @@
 defmodule CPSIM.CP.Heartbeat do
   require Logger
 
-  def format_response_state(module_state) do
-    module_state
-    |> Map.from_struct()
-    |> Map.take([:interval, :last_message_at, :last_heartbeat_at])
-  end
-
   defguard enabled?(state) when is_map_key(state.modules, __MODULE__)
 
   def init(state, interval) when enabled?(state) do

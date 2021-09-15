@@ -1,12 +1,6 @@
 defmodule CPSIM.CP.Connection do
   require Logger
 
-  def format_response_state(module_state) do
-    module_state
-    |> Map.from_struct()
-    |> Map.take([:status, :connection_error, :retry_at, :current_time_diff, :outgoing_call_queue])
-  end
-
   def init(state) do
     {:ok, pid} =
       __MODULE__.WS.start_link(

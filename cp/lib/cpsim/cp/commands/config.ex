@@ -6,4 +6,9 @@ defmodule CPSIM.CP.Commands.Config do
   @type t :: %__MODULE__{
           supported_commands: [module()]
         }
+
+  def format_response(config) do
+    config
+    |> Map.from_struct()
+  end
 end

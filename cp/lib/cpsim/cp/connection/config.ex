@@ -9,4 +9,9 @@ defmodule CPSIM.CP.Connection.Config do
           call_timeout_interval: non_neg_integer(),
           default_retry_interval: non_neg_integer()
         }
+
+  def format_response(config) do
+    config
+    |> Map.from_struct()
+  end
 end

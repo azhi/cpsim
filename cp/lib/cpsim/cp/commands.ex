@@ -1,11 +1,6 @@
 defmodule CPSIM.CP.Commands do
   alias CPSIM.CP.Connection.Messages.CallError
 
-  def format_response_state(module_state) do
-    module_state
-    |> Map.from_struct()
-  end
-
   def handle_call(call, state) do
     with {:ok, command_module} <- pick_command_module(call.action),
          :ok <- check_command_enabled(command_module, state) do

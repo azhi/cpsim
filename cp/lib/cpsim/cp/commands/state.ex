@@ -8,4 +8,9 @@ defmodule CPSIM.CP.Commands.State do
   def new(_config) do
     %__MODULE__{}
   end
+
+  def format_response(state) do
+    state
+    |> Map.from_struct()
+  end
 end

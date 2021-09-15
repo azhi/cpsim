@@ -1,12 +1,6 @@
 defmodule CPSIM.CP.Status do
   defguardp enabled?(state) when is_map_key(state.modules, __MODULE__)
 
-  def format_response_state(module_state) do
-    module_state
-    |> Map.from_struct()
-    |> Map.take([:status, :status_reported_at, :connector_statuses, :connector_statuses_reported_at])
-  end
-
   def reset_reported_at(state) when enabled?(state) do
     state
     |> put_in([:modules, __MODULE__, :state, :status_reported_at], nil)

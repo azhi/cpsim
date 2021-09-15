@@ -11,7 +11,7 @@ defmodule CPSIM.CP.Connection.Messages.Call do
           timeout_timer: reference() | nil,
           id: String.t(),
           action: String.t(),
-          payload: String.t()
+          payload: Map.t()
         }
 
   @type_id 2

@@ -35,4 +35,13 @@ defmodule CPSIM.CP.Actions.State do
         %__MODULE__{status: :idle, queue: [], instruction_pointer: {nil, nil}}
     end
   end
+
+  def format_response(state) do
+    state
+    |> Map.from_struct()
+    |> Map.take([:status, :queue, :instruction_pointer, :started_transaction_id, :started_transaction_connector])
+    |> Map.update!(:instruction_pointer, fn {batch_ind, action_ind} ->
+      %{batch_ind: batch_ind, action_ind: action_ind}
+    end)
+  end
 end

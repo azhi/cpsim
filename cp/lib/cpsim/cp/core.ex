@@ -40,10 +40,12 @@ defmodule CPSIM.CP.Core do
       @modules
       |> Enum.reduce(state, fn module, state ->
         state
-        |> update_in([:modules, module, :config], &Map.from_struct/1)
-        |> update_in([:modules, module, :state], &module.format_response_state/1)
+        |> update_in([:modules], &Map.put_new(&1, module, nil))
+        |> update_in([:modules, module, :config], & &1.__struct__.format_response(&1))
+        |> update_in([:modules, module, :state], & &1.__struct__.format_response(&1))
       end)
       |> update_in([:internal_config], &Map.from_struct/1)
+      |> update_in([:internal_config, :connector_meters], &Enum.map(&1, fn {_ind, value} -> value end))
       |> update_in([:ocpp_config], &Map.from_struct/1)
       |> update_in([:ocpp_config, :items, Access.all()], &Map.from_struct/1)
 

@@ -11,11 +11,17 @@ defmodule CPSIM.CP.Connection.State do
           retry_at: DateTime.t() | nil,
           # TODO: use this diff
           current_time_diff: non_neg_integer() | nil,
-          outgoing_call_queue: [CPSIM.CP.Connection.OutgoingMessage.t()],
+          outgoing_call_queue: [CPSIM.CP.Connection.Call.t()],
           ws: pid() | nil
         }
 
   def new(_config) do
     %__MODULE__{status: :idle, outgoing_call_queue: []}
+  end
+
+  def format_response(state) do
+    state
+    |> Map.from_struct()
+    |> Map.take([:status, :connection_error, :retry_at, :current_time_diff, :outgoing_call_queue])
   end
 end
