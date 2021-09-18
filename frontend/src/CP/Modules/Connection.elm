@@ -1,8 +1,9 @@
-module CP.Modules.Connection exposing (CPModuleConnection, CPModuleConnectionConfig, CPModuleConnectionState(..), cpModulesConnectionDecoder)
+module CP.Modules.Connection exposing (CPModuleConnection, CPModuleConnectionConfig, CPModuleConnectionState(..), configEncoder, cpModulesConnectionDecoder)
 
 import Json.Decode as D
 import Json.Decode.Extra as DE
 import Json.Decode.Pipeline exposing (hardcoded, optional, required)
+import Json.Encode as E
 import Time
 
 
@@ -130,3 +131,13 @@ ocppCallStatusDecoder =
                 else
                     D.succeed NotSent
             )
+
+
+configEncoder : CPModuleConnectionConfig -> E.Value
+configEncoder cfg =
+    E.object
+        [ ( "call_timeout_interval", E.int cfg.callTimeoutInterval )
+        , ( "default_retry_interval", E.int cfg.defaultRetryInterval )
+        , ( "hard_reboot_interval", E.int cfg.hardRebootInterval )
+        , ( "soft_reboot_interval", E.int cfg.softRebootInterval )
+        ]

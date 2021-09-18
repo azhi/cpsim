@@ -1,10 +1,11 @@
-module CP.Modules.Status exposing (CPModuleStatus, CPModuleStatusConfig, cpModulesStatusDecoder)
+module CP.Modules.Status exposing (CPModuleStatus, CPModuleStatusConfig, configEncoder, cpModulesStatusDecoder)
 
 import CP.Modules.Status.OCPPConnectorStatus as CS exposing (OCPPConnectorStatus)
 import CP.Modules.Status.OCPPStatus as S exposing (OCPPStatus)
 import Json.Decode as D
 import Json.Decode.Extra as DE
 import Json.Decode.Pipeline exposing (custom, hardcoded, optional, required)
+import Json.Encode as E
 import Time
 
 
@@ -41,8 +42,8 @@ cpModulesStatusDecoder =
 configDecoder : D.Decoder CPModuleStatusConfig
 configDecoder =
     D.succeed CPModuleStatusConfig
-        |> required "initial_status" ocppStatusDecoder
-        |> required "initial_connector_statuses" (D.list ocppConnectorStatusDecoder)
+        |> required "initial_status" S.decoder
+        |> required "initial_connector_statuses" (D.list CS.decoder)
 
 
 stateDecoder : D.Decoder CPModuleStatusState
@@ -59,10 +60,10 @@ ocppStateStatusDecoder =
             (\mr ->
                 case mr of
                     Just r ->
-                        D.map (REPORTED r) (D.field "status" ocppStatusDecoder)
+                        D.map (REPORTED r) (D.field "status" S.decoder)
 
                     Nothing ->
-                        D.map NOT_REPORTED (D.field "status" ocppStatusDecoder)
+                        D.map NOT_REPORTED (D.field "status" S.decoder)
             )
 
 
@@ -85,63 +86,13 @@ ocppStateConnectorStatusDecoder =
                             lmr
                             ls
                     )
-                    (D.field "connector_statuses" (D.list ocppConnectorStatusDecoder))
+                    (D.field "connector_statuses" (D.list CS.decoder))
             )
 
 
-ocppStatusDecoder : D.Decoder OCPPStatus
-ocppStatusDecoder =
-    D.string
-        |> D.andThen
-            (\status ->
-                case status of
-                    "available" ->
-                        D.succeed S.AVAILABLE
-
-                    "unavailable" ->
-                        D.succeed S.UNAVAILABLE
-
-                    "faulted" ->
-                        D.succeed S.FAULTED
-
-                    other ->
-                        D.fail ("Unexpected ocpp status " ++ other)
-            )
-
-
-ocppConnectorStatusDecoder : D.Decoder OCPPConnectorStatus
-ocppConnectorStatusDecoder =
-    D.string
-        |> D.andThen
-            (\status ->
-                case status of
-                    "available" ->
-                        D.succeed CS.AVAILABLE
-
-                    "unavailable" ->
-                        D.succeed CS.UNAVAILABLE
-
-                    "faulted" ->
-                        D.succeed CS.FAULTED
-
-                    "preparing" ->
-                        D.succeed CS.PREPARING
-
-                    "charging" ->
-                        D.succeed CS.CHARGING
-
-                    "suspended_ev" ->
-                        D.succeed CS.SUSPENDED_EV
-
-                    "suspended_evse" ->
-                        D.succeed CS.SUSPENDED_EVSE
-
-                    "finishing" ->
-                        D.succeed CS.FINISHING
-
-                    "reserved" ->
-                        D.succeed CS.RESERVED
-
-                    other ->
-                        D.fail ("Unexpected ocpp connector status " ++ other)
-            )
+configEncoder : CPModuleStatusConfig -> E.Value
+configEncoder cfg =
+    E.object
+        [ ( "initial_status", S.encoder cfg.initialStatus )
+        , ( "initial_connector_statuses", E.list CS.encoder cfg.initialConnectorStatuses )
+        ]

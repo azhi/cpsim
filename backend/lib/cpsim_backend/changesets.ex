@@ -2,7 +2,7 @@ defmodule CPSIM.Backend.Changesets do
   alias CPSIM.CP.{InternalConfig, OCPPConfig, Connection, Actions, Heartbeat, Commands, Status}
 
   def cp_opts(args) do
-    types = %{internal_config: :map, ocpp_config: {:array, :map}, modules: :map}
+    types = %{internal_config: :map, ocpp_config: :map, modules: :map}
 
     with {:ok, args} <-
            {%{}, types}
@@ -10,10 +10,9 @@ defmodule CPSIM.Backend.Changesets do
            |> Ecto.Changeset.validate_required(Map.keys(types))
            |> Ecto.Changeset.apply_action(:validate),
          {:ok, args} <- cast_embed(args, [:internal_config], &internal_config/1),
-         {:ok, args} <- cast_embeds(args, [:ocpp_config], &ocpp_config/1),
+         {:ok, args} <- cast_embed(args, [:ocpp_config], &ocpp_config/1),
          {:ok, args} <- cast_embed(args, [:modules], &modules/1) do
       args
-      |> update_in([:ocpp_config], &%OCPPConfig{items: &1})
       |> then(&{:ok, &1})
     end
   end
@@ -84,6 +83,19 @@ defmodule CPSIM.Backend.Changesets do
   end
 
   defp ocpp_config(args) do
+    types = %{items: {:array, :map}}
+
+    with {:ok, args} <-
+           {%OCPPConfig{}, types}
+           |> Ecto.Changeset.cast(args, Map.keys(types))
+           |> Ecto.Changeset.validate_required(~w[items]a)
+           |> Ecto.Changeset.apply_action(:validate),
+         {:ok, args} <- cast_embeds(args, [:items], &ocpp_config_item/1) do
+      {:ok, args}
+    end
+  end
+
+  defp ocpp_config_item(args) do
     types = %{key: :string, value: :string, readonly: :boolean}
 
     {%OCPPConfig.Item{}, types}

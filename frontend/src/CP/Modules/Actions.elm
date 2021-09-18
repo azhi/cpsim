@@ -1,8 +1,9 @@
-module CP.Modules.Actions exposing (CPModuleActions, CPModuleActionsConfig, cpModulesActionsDecoder)
+module CP.Modules.Actions exposing (CPModuleActions, CPModuleActionsConfig, configEncoder, cpModulesActionsDecoder)
 
 import Json.Decode as D
 import Json.Decode.Extra as DE
 import Json.Decode.Pipeline exposing (custom, hardcoded, optional, required)
+import Json.Encode as E
 
 
 type alias CPModuleActions =
@@ -145,6 +146,28 @@ actionTypeDecoder =
             )
 
 
+actionTypeToString : CPModuleActionsActionType -> String
+actionTypeToString typ =
+    case typ of
+        STATUS_CHANGE ->
+            "status_change"
+
+        AUTHORIZE ->
+            "authorize"
+
+        START_TRANSACTION ->
+            "start_transaction"
+
+        STOP_TRANSACTION ->
+            "stop_transaction"
+
+        CHARGE_PERIOD ->
+            "charge_period"
+
+        DELAY ->
+            "delay"
+
+
 actionStatusDecoder : D.Decoder CPModuleActionsActionStatus
 actionStatusDecoder =
     D.string
@@ -163,3 +186,42 @@ actionStatusDecoder =
                     other ->
                         D.fail ("Unexpected action status " ++ other)
             )
+
+
+actionStatusToString : CPModuleActionsActionStatus -> String
+actionStatusToString status =
+    case status of
+        IDLE ->
+            "idle"
+
+        IN_PROGRESS ->
+            "in_progress"
+
+        DONE ->
+            "done"
+
+
+configEncoder : CPModuleActionsConfig -> E.Value
+configEncoder cfg =
+    E.object
+        [ ( "initial_queue", E.list batchEncoder cfg.initialQueue )
+        ]
+
+
+batchEncoder : CPModuleActionsBatch -> E.Value
+batchEncoder batch =
+    E.object
+        [ ( "actions", E.list actionEncoder batch.actions )
+        ]
+
+
+
+-- TODO:
+
+
+actionEncoder : CPModuleActionsAction -> E.Value
+actionEncoder action =
+    E.object
+        [ ( "type", E.string <| actionTypeToString action.typ )
+        , ( "status", E.string <| actionStatusToString action.status )
+        ]

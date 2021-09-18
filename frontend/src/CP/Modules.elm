@@ -1,9 +1,9 @@
 module CP.Modules exposing (CPModules, cpModulesDecoder)
 
 import CP.Modules.Actions exposing (CPModuleActions, cpModulesActionsDecoder)
-import CP.Modules.Commands exposing (CPModuleCommands)
+import CP.Modules.Commands exposing (CPModuleCommands, cpModulesCommandsDecoder)
 import CP.Modules.Connection exposing (CPModuleConnection, cpModulesConnectionDecoder)
-import CP.Modules.Heartbeat exposing (CPModuleHeartbeat)
+import CP.Modules.Heartbeat exposing (CPModuleHeartbeat, cpModulesHeartbeatDecoder)
 import CP.Modules.Status exposing (CPModuleStatus, cpModulesStatusDecoder)
 import Json.Decode as D
 import Json.Decode.Pipeline exposing (hardcoded, optional, required)
@@ -24,5 +24,5 @@ cpModulesDecoder =
         |> required "Elixir.CPSIM.CP.Connection" cpModulesConnectionDecoder
         |> required "Elixir.CPSIM.CP.Status" cpModulesStatusDecoder
         |> required "Elixir.CPSIM.CP.Actions" cpModulesActionsDecoder
-        |> hardcoded Nothing
-        |> hardcoded Nothing
+        |> required "Elixir.CPSIM.CP.Commands" cpModulesCommandsDecoder
+        |> required "Elixir.CPSIM.CP.Heartbeat" cpModulesHeartbeatDecoder
