@@ -152,14 +152,13 @@ defmodule CPSIM.Backend.Changesets do
   end
 
   defp actions_module(args) do
-    types = %{initial_queue: {:array, :map}}
+    types = %{initial_queue: :map}
 
     with {:ok, args} <-
            {%Actions.Config{}, types}
            |> Ecto.Changeset.cast(args, Map.keys(types))
-           |> Ecto.Changeset.validate_required(Map.keys(types))
            |> Ecto.Changeset.apply_action(:validate),
-         {:ok, args} <- cast_embeds(args, [:initial_queue], &actions_batch/1) do
+         {:ok, args} <- cast_embed(args, [:initial_queue], &actions_batch/1) do
       {:ok, args}
     end
   end

@@ -4,7 +4,7 @@ defmodule CPSIM.CP.Actions.Config do
   use Accessible
 
   @type t :: %__MODULE__{
-          initial_queue: [CPSIM.CP.Actions.Batch.t()]
+          initial_queue: CPSIM.CP.Actions.Batch.t()
         }
 
   def format_response(config) do

@@ -2,7 +2,7 @@ module Page.LaunchCP exposing (Model, Msg, init, subscriptions, toSession, updat
 
 import CP exposing (CP, cpDecoder)
 import CP.InternalConfig exposing (CPInternalConfig)
-import CP.Modules.Actions exposing (CPModuleActionsConfig)
+import CP.Modules.Actions as A exposing (CPModuleActionsAction, CPModuleActionsActionTypeChargePeriodConfigSpeedup, CPModuleActionsBatch, CPModuleActionsConfig)
 import CP.Modules.Commands as C exposing (CPModuleCommandsConfig)
 import CP.Modules.Connection exposing (CPModuleConnectionConfig)
 import CP.Modules.Heartbeat exposing (CPModuleHeartbeatConfig)
@@ -74,7 +74,22 @@ defaultStatusModule =
 
 defaultActionsModule : CPModuleActionsConfig
 defaultActionsModule =
-    CPModuleActionsConfig []
+    CPModuleActionsConfig <|
+        Just <|
+            CPModuleActionsBatch
+                [ A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+                , A.CPModuleActionsAction A.IDLE (A.STATUS_CHANGE { connector = 1, status = CS.PREPARING })
+                , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+                , A.CPModuleActionsAction A.IDLE (A.AUTHORIZE { idTag = "123" })
+                , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+                , A.CPModuleActionsAction A.IDLE (A.STATUS_CHANGE { connector = 1, status = CS.CHARGING })
+                , A.CPModuleActionsAction A.IDLE (A.START_TRANSACTION { connector = 1, idTag = "123" })
+                , A.CPModuleActionsAction A.IDLE (A.CHARGE_PERIOD { initialVehicleCharge = 5000, period = 60, speedup = A.IncreasePower 10.0, vehicleBatteryCapacity = 50000, vehiclePowerCapacity = 10000 } Nothing)
+                , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 5 })
+                , A.CPModuleActionsAction A.IDLE (A.STATUS_CHANGE { connector = 1, status = CS.FINISHING })
+                , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+                , A.CPModuleActionsAction A.IDLE (A.STOP_TRANSACTION { idTag = "123" })
+                ]
 
 
 defaultCommandsModule : CPModuleCommandsConfig
@@ -137,6 +152,7 @@ type CPModulesMsg
     | GotCommandsSupportedItems (List C.CPModuleCommandsCommand)
     | GotHeartbeatToggle Bool
     | GotHeartbeatDefaultInterval Int
+    | GotActionsToggle Bool
 
 
 type Msg
@@ -269,6 +285,13 @@ updateCPModules msg model =
         ( { heartbeatModule }, GotHeartbeatDefaultInterval int ) ->
             ( { model | heartbeatModule = Maybe.map (\hm -> { hm | defaultInterval = int }) heartbeatModule }, Cmd.none )
 
+        ( _, GotActionsToggle bool ) ->
+            if bool then
+                ( { model | actionsModule = Just defaultActionsModule }, Cmd.none )
+
+            else
+                ( { model | actionsModule = Nothing }, Cmd.none )
+
 
 listReplaceOnInd : Int -> a -> List a -> List a
 listReplaceOnInd ind value list =
@@ -364,6 +387,7 @@ launchParams model =
                 ]
                     ++ launchParamsMaybeModule model.commandsModule "commands" C.configEncoder
                     ++ launchParamsMaybeModule model.heartbeatModule "heartbeat" CP.Modules.Heartbeat.configEncoder
+                    ++ launchParamsMaybeModule model.actionsModule "actions" A.configEncoder
           )
         ]
 
@@ -392,6 +416,7 @@ view model =
                 , viewStatusModuleForm model.statusModule
                 , viewMaybeCommandsModuleForm model.commandsModule
                 , viewMaybeHeartbeatModuleForm model.heartbeatModule
+                , viewMaybeActionsModuleForm model.actionsModule
                 , viewSubmit
                 ]
             ]
@@ -525,6 +550,138 @@ viewHeartbeatModuleForm : CPModuleHeartbeatConfig -> List (Html Msg)
 viewHeartbeatModuleForm hm =
     [ viewIntInput "default_heartbeat_interval" "Default interval" hm.defaultInterval (GotHeartbeatDefaultInterval >> CPModules)
     ]
+
+
+viewMaybeActionsModuleForm : Maybe CPModuleActionsConfig -> Html Msg
+viewMaybeActionsModuleForm am =
+    fieldset []
+        (legend [ class "d-flex", disabled <| isModuleEnabled am ]
+            [ span [] [ text "Actions module" ]
+            , div [ class "form-check form-switch mx-1" ]
+                [ input [ class "form-check-input", id "actions_module_enable", type_ "checkbox", checked <| isModuleEnabled am, onCheck (GotActionsToggle >> CPModules) ] []
+                ]
+            ]
+            :: (Maybe.map viewActionsModuleForm am
+                    |> Maybe.withDefault []
+               )
+        )
+
+
+viewActionsModuleForm : CPModuleActionsConfig -> List (Html Msg)
+viewActionsModuleForm am =
+    [ div [ class "mb-3" ]
+        [ label [ class "form-label" ] [ text "Initial actions queue" ]
+        , viewActionsEditor (Maybe.map (\b -> b.actions) am.initialQueue |> Maybe.withDefault [])
+        ]
+    ]
+
+
+viewActionsEditor : List CPModuleActionsAction -> Html Msg
+viewActionsEditor actions =
+    div [ class "d-flex" ]
+        [ actionListForm actions
+        , actionListToolbox
+        ]
+
+
+actionListForm : List CPModuleActionsAction -> Html Msg
+actionListForm actions =
+    div [ class "p-3 bg-light flex-grow-1 me-3" ] <| List.map actionForm actions
+
+
+actionForm : CPModuleActionsAction -> Html Msg
+actionForm action =
+    div [ class "border rounded-3" ]
+        (span [] [ text <| actionTitle action ]
+            :: actionInputs action
+        )
+
+
+actionTitle : CPModuleActionsAction -> String
+actionTitle action =
+    case action.typ of
+        A.STATUS_CHANGE _ ->
+            "Status Change"
+
+        A.AUTHORIZE _ ->
+            "Authorize"
+
+        A.START_TRANSACTION _ ->
+            "Start Transaction"
+
+        A.STOP_TRANSACTION _ ->
+            "Stop Transaction"
+
+        A.CHARGE_PERIOD _ _ ->
+            "Charge Period"
+
+        A.DELAY _ ->
+            "Delay"
+
+
+actionInputs : CPModuleActionsAction -> List (Html Msg)
+actionInputs action =
+    case action.typ of
+        A.STATUS_CHANGE cfg ->
+            [ viewIntInput "connector" "Connector" cfg.connector (GotHeartbeatDefaultInterval >> CPModules)
+            , div [ class "mb-3" ]
+                [ label [ class "form-label" ] [ text "Connector OCPP Status" ]
+                , viewTypedSelect CS.options CS.humanString CS.fromString CS.toString cfg.status (GotStatusConnectorInitial 1 >> CPModules)
+                ]
+            ]
+
+        A.AUTHORIZE cfg ->
+            [ viewTextInput "id_tag" "ID Tag" cfg.idTag (InternalConfig << GotWsEndpoint) ]
+
+        A.START_TRANSACTION cfg ->
+            [ viewIntInput "connector" "Connector" cfg.connector (GotHeartbeatDefaultInterval >> CPModules)
+            , viewTextInput "id_tag" "ID Tag" cfg.idTag (InternalConfig << GotWsEndpoint)
+            ]
+
+        A.STOP_TRANSACTION cfg ->
+            [ viewTextInput "id_tag" "ID Tag" cfg.idTag (InternalConfig << GotWsEndpoint) ]
+
+        A.CHARGE_PERIOD cfg _ ->
+            [ viewIntInput "vehicle_power_capacity" "Vehicle Power Capacity (Power Limit, W)" cfg.vehiclePowerCapacity (GotHeartbeatDefaultInterval >> CPModules)
+            , viewIntInput "period" "Period (s)" cfg.period (GotHeartbeatDefaultInterval >> CPModules)
+            , viewIntInput "vehicle_battery_capacity" "Vehicle Battery Capacity (Charging Limit, Wh)" cfg.vehicleBatteryCapacity (GotHeartbeatDefaultInterval >> CPModules)
+
+            -- TODO: float
+            , viewIntInput "initial_vehicle_charge" "Initial Vehicle Charge (Wh)" 1 (GotHeartbeatDefaultInterval >> CPModules)
+
+            -- TODO: speedup typed select
+            ]
+                ++ speedupCoeffInput cfg.speedup
+
+        A.DELAY cfg ->
+            [ viewIntInput "interval" "Interval" cfg.interval (GotHeartbeatDefaultInterval >> CPModules) ]
+
+
+speedupCoeffInput : CPModuleActionsActionTypeChargePeriodConfigSpeedup -> List (Html Msg)
+speedupCoeffInput speedup =
+    case speedup of
+        A.IncreasePower coeff ->
+            [ viewIntInput "speedup_increase_power_coeff" "Speedup coefficient (more than 1.0 means faster)" 2 (GotHeartbeatDefaultInterval >> CPModules) ]
+
+        A.TimeDilation coeff ->
+            [ viewIntInput "speedup_time_dilation_coeff" "Speedup coefficient (more than 1.0 means faster)" 2 (GotHeartbeatDefaultInterval >> CPModules) ]
+
+        A.None ->
+            []
+
+
+actionListToolbox : Html Msg
+actionListToolbox =
+    div []
+        [ ul [ class "nav nav-tabs" ]
+            [ li [ class "nav-item" ] [ button [ class "nav-link active" ] [ text "Templates" ] ]
+            , li [ class "nav-item" ] [ button [ class "nav-link" ] [ text "Actions" ] ]
+            ]
+        , div []
+            [ div [] [ text "Template content" ]
+            , div [] [ text "Actions content" ]
+            ]
+        ]
 
 
 viewSubmit : Html Msg

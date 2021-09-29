@@ -28,11 +28,9 @@ defmodule CPSIM.CP.Actions.State do
 
   def new(config) do
     case config.initial_queue do
-      list when is_list(list) and length(list) > 0 ->
-        %__MODULE__{status: :executing, queue: config.initial_queue, instruction_pointer: {0, 0}}
-
-      _else ->
-        %__MODULE__{status: :idle, queue: [], instruction_pointer: {nil, nil}}
+      %{actions: list} when is_list(list) and length(list) > 0 -> new_executing(config.initial_queue)
+      nil -> new_idle()
+      %{} = other -> raise("Expected batch to have actions key with at least one action, got: #{inspect(other)}")
     end
   end
 
@@ -43,5 +41,13 @@ defmodule CPSIM.CP.Actions.State do
     |> Map.update!(:instruction_pointer, fn {batch_ind, action_ind} ->
       %{batch_ind: batch_ind, action_ind: action_ind}
     end)
+  end
+
+  defp new_executing(batch) do
+    %__MODULE__{status: :executing, queue: [batch], instruction_pointer: {0, 0}}
+  end
+
+  defp new_idle do
+    %__MODULE__{status: :idle, queue: [], instruction_pointer: {nil, nil}}
   end
 end
