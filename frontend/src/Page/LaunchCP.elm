@@ -30,9 +30,20 @@ type alias Model =
     , ocppConfig : CPOCPPConfig
     , connectionModule : CPModuleConnectionConfig
     , statusModule : CPModuleStatusConfig
-    , actionsModule : Maybe CPModuleActionsConfig
+    , actionsModuleForm : Maybe ( CPModuleActionsConfig, ActionsFormModel )
     , commandsModule : Maybe CPModuleCommandsConfig
     , heartbeatModule : Maybe CPModuleHeartbeatConfig
+    }
+
+
+type ActionsFormModelTab
+    = Template
+    | Actions
+
+
+type alias ActionsFormModel =
+    { actions : List CPModuleActionsAction
+    , selectedTab : ActionsFormModelTab
     }
 
 
@@ -92,6 +103,25 @@ defaultActionsModule =
                 ]
 
 
+defaultActionsForm : ActionsFormModel
+defaultActionsForm =
+    ActionsFormModel
+        [ A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+        , A.CPModuleActionsAction A.IDLE (A.STATUS_CHANGE { connector = 1, status = CS.PREPARING })
+        , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+        , A.CPModuleActionsAction A.IDLE (A.AUTHORIZE { idTag = "123" })
+        , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+        , A.CPModuleActionsAction A.IDLE (A.STATUS_CHANGE { connector = 1, status = CS.CHARGING })
+        , A.CPModuleActionsAction A.IDLE (A.START_TRANSACTION { connector = 1, idTag = "123" })
+        , A.CPModuleActionsAction A.IDLE (A.CHARGE_PERIOD { initialVehicleCharge = 5000, period = 60, speedup = A.IncreasePower 10.0, vehicleBatteryCapacity = 50000, vehiclePowerCapacity = 10000 } Nothing)
+        , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 5 })
+        , A.CPModuleActionsAction A.IDLE (A.STATUS_CHANGE { connector = 1, status = CS.FINISHING })
+        , A.CPModuleActionsAction A.IDLE (A.DELAY { interval = 2 })
+        , A.CPModuleActionsAction A.IDLE (A.STOP_TRANSACTION { idTag = "123" })
+        ]
+        Template
+
+
 defaultCommandsModule : CPModuleCommandsConfig
 defaultCommandsModule =
     CPModuleCommandsConfig
@@ -109,7 +139,7 @@ defaultHeartbeatModule =
 
 init : Session -> ( Model, Cmd Msg )
 init session =
-    ( Model session defaultInternalConfig defaultOcppConfig defaultConnectionModule defaultStatusModule (Just defaultActionsModule) (Just defaultCommandsModule) (Just defaultHeartbeatModule)
+    ( Model session defaultInternalConfig defaultOcppConfig defaultConnectionModule defaultStatusModule (Just ( defaultActionsModule, defaultActionsForm )) (Just defaultCommandsModule) (Just defaultHeartbeatModule)
     , Cmd.none
     )
 
@@ -155,10 +185,27 @@ type CPModulesMsg
     | GotActionsToggle Bool
 
 
+type ActionFormMsg
+    = SwitchToTab ActionsFormModelTab
+    | GotStatusChangeConnector Int A.CPModuleActionsActionTypeStatusChangeConfig Int
+    | GotStatusChangeStatus Int A.CPModuleActionsActionTypeStatusChangeConfig CS.OCPPConnectorStatus
+    | GotAuthorizeIdTag Int A.CPModuleActionsActionTypeAuthorizeConfig String
+    | GotStartTransactionConnector Int A.CPModuleActionsActionTypeStartTransactionConfig Int
+    | GotStartTransactionIdTag Int A.CPModuleActionsActionTypeStartTransactionConfig String
+    | GotStopTransactionIdTag Int A.CPModuleActionsActionTypeStopTransactionConfig String
+    | GotChargePeriodVehiclePowerCapacity Int A.CPModuleActionsActionTypeChargePeriodConfig Int
+    | GotChargePeriodPeriod Int A.CPModuleActionsActionTypeChargePeriodConfig Int
+    | GotChargePeriodVehicleBatteryCapacity Int A.CPModuleActionsActionTypeChargePeriodConfig Int
+    | GotChargePeriodInitialVehicleCharge Int A.CPModuleActionsActionTypeChargePeriodConfig Float
+    | GotChargePeriodSpeedup Int A.CPModuleActionsActionTypeChargePeriodConfig A.CPModuleActionsActionTypeChargePeriodConfigSpeedup
+    | GotDelayInterval Int A.CPModuleActionsActionTypeDelayConfig Int
+
+
 type Msg
     = InternalConfig InternalConfigMsg
     | OCPPConfig OCPPConfigMsg
     | CPModules CPModulesMsg
+    | ActionForm ActionFormMsg
     | Submit
     | CPLaunched (Result Http.Error CP)
 
@@ -174,6 +221,9 @@ update msg model =
 
         CPModules subMsg ->
             updateCPModules subMsg model
+
+        ActionForm subMsg ->
+            updateActionForm subMsg model
 
         Submit ->
             ( model, submitLaunch model )
@@ -287,10 +337,68 @@ updateCPModules msg model =
 
         ( _, GotActionsToggle bool ) ->
             if bool then
-                ( { model | actionsModule = Just defaultActionsModule }, Cmd.none )
+                ( { model | actionsModuleForm = Just ( defaultActionsModule, defaultActionsForm ) }, Cmd.none )
 
             else
-                ( { model | actionsModule = Nothing }, Cmd.none )
+                ( { model | actionsModuleForm = Nothing }, Cmd.none )
+
+
+updateActionForm : ActionFormMsg -> Model -> ( Model, Cmd Msg )
+updateActionForm msg model =
+    case ( model, msg ) of
+        ( { actionsModuleForm }, SwitchToTab tab ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> updateActionFormComponent (\af -> { af | selectedTab = tab }) amf) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotStatusChangeConnector ind cfg int ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.STATUS_CHANGE { cfg | connector = int })) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotStatusChangeStatus ind cfg status ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.STATUS_CHANGE { cfg | status = status })) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotAuthorizeIdTag ind cfg str ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.AUTHORIZE { cfg | idTag = str })) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotStartTransactionConnector ind cfg int ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.START_TRANSACTION { cfg | connector = int })) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotStartTransactionIdTag ind cfg str ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.START_TRANSACTION { cfg | idTag = str })) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotStopTransactionIdTag ind cfg str ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.STOP_TRANSACTION { cfg | idTag = str })) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotChargePeriodVehiclePowerCapacity ind cfg int ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.CHARGE_PERIOD { cfg | vehiclePowerCapacity = int } Nothing)) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotChargePeriodPeriod ind cfg int ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.CHARGE_PERIOD { cfg | period = int } Nothing)) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotChargePeriodVehicleBatteryCapacity ind cfg int ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.CHARGE_PERIOD { cfg | vehicleBatteryCapacity = int } Nothing)) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotChargePeriodInitialVehicleCharge ind cfg float ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.CHARGE_PERIOD { cfg | initialVehicleCharge = float } Nothing)) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotChargePeriodSpeedup ind cfg speedup ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.CHARGE_PERIOD { cfg | speedup = speedup } Nothing)) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+        ( { actionsModuleForm }, GotDelayInterval ind cfg int ) ->
+            ( { model | actionsModuleForm = Maybe.map (\amf -> amf |> updateActionFormComponent (updateActionFormAction ind (A.DELAY { cfg | interval = int })) |> updateActionModuleList) actionsModuleForm }, Cmd.none )
+
+
+updateActionModuleList : ( CPModuleActionsConfig, ActionsFormModel ) -> ( CPModuleActionsConfig, ActionsFormModel )
+updateActionModuleList ( am, af ) =
+    ( { am | initialQueue = Just <| CPModuleActionsBatch af.actions }, af )
+
+
+updateActionFormComponent : (ActionsFormModel -> ActionsFormModel) -> ( CPModuleActionsConfig, ActionsFormModel ) -> ( CPModuleActionsConfig, ActionsFormModel )
+updateActionFormComponent fn ( am, af ) =
+    ( am, fn af )
+
+
+updateActionFormAction : Int -> A.CPModuleActionsActionType -> ActionsFormModel -> ActionsFormModel
+updateActionFormAction ind typ af =
+    { af | actions = listUpdateOnInd ind (\x -> { x | typ = typ }) af.actions }
 
 
 listReplaceOnInd : Int -> a -> List a -> List a
@@ -387,7 +495,7 @@ launchParams model =
                 ]
                     ++ launchParamsMaybeModule model.commandsModule "commands" C.configEncoder
                     ++ launchParamsMaybeModule model.heartbeatModule "heartbeat" CP.Modules.Heartbeat.configEncoder
-                    ++ launchParamsMaybeModule model.actionsModule "actions" A.configEncoder
+                    ++ launchParamsMaybeModule model.actionsModuleForm "actions" (Tuple.first >> A.configEncoder)
           )
         ]
 
@@ -416,7 +524,7 @@ view model =
                 , viewStatusModuleForm model.statusModule
                 , viewMaybeCommandsModuleForm model.commandsModule
                 , viewMaybeHeartbeatModuleForm model.heartbeatModule
-                , viewMaybeActionsModuleForm model.actionsModule
+                , viewMaybeActionsModuleForm model.actionsModuleForm
                 , viewSubmit
                 ]
             ]
@@ -552,7 +660,7 @@ viewHeartbeatModuleForm hm =
     ]
 
 
-viewMaybeActionsModuleForm : Maybe CPModuleActionsConfig -> Html Msg
+viewMaybeActionsModuleForm : Maybe ( CPModuleActionsConfig, ActionsFormModel ) -> Html Msg
 viewMaybeActionsModuleForm am =
     fieldset []
         (legend [ class "d-flex", disabled <| isModuleEnabled am ]
@@ -567,33 +675,33 @@ viewMaybeActionsModuleForm am =
         )
 
 
-viewActionsModuleForm : CPModuleActionsConfig -> List (Html Msg)
-viewActionsModuleForm am =
+viewActionsModuleForm : ( CPModuleActionsConfig, ActionsFormModel ) -> List (Html Msg)
+viewActionsModuleForm ( am, fm ) =
     [ div [ class "mb-3" ]
         [ label [ class "form-label" ] [ text "Initial actions queue" ]
-        , viewActionsEditor (Maybe.map (\b -> b.actions) am.initialQueue |> Maybe.withDefault [])
+        , viewActionsEditor fm
         ]
     ]
 
 
-viewActionsEditor : List CPModuleActionsAction -> Html Msg
-viewActionsEditor actions =
+viewActionsEditor : ActionsFormModel -> Html Msg
+viewActionsEditor fm =
     div [ class "d-flex" ]
-        [ actionListForm actions
-        , actionListToolbox
+        [ actionListForm fm.actions
+        , actionListToolbox fm.selectedTab
         ]
 
 
 actionListForm : List CPModuleActionsAction -> Html Msg
 actionListForm actions =
-    div [ class "p-3 bg-light flex-grow-1 me-3" ] <| List.map actionForm actions
+    div [ class "p-3 bg-light flex-grow-1 me-3" ] <| List.indexedMap actionForm actions
 
 
-actionForm : CPModuleActionsAction -> Html Msg
-actionForm action =
+actionForm : Int -> CPModuleActionsAction -> Html Msg
+actionForm ind action =
     div [ class "border rounded-3" ]
         (span [] [ text <| actionTitle action ]
-            :: actionInputs action
+            :: actionInputs ind action
         )
 
 
@@ -619,74 +727,79 @@ actionTitle action =
             "Delay"
 
 
-actionInputs : CPModuleActionsAction -> List (Html Msg)
-actionInputs action =
+actionInputs : Int -> CPModuleActionsAction -> List (Html Msg)
+actionInputs ind action =
     case action.typ of
         A.STATUS_CHANGE cfg ->
-            [ viewIntInput "connector" "Connector" cfg.connector (GotHeartbeatDefaultInterval >> CPModules)
+            [ viewIntInput "connector" "Connector" cfg.connector (GotStatusChangeConnector ind cfg >> ActionForm)
             , div [ class "mb-3" ]
                 [ label [ class "form-label" ] [ text "Connector OCPP Status" ]
-                , viewTypedSelect CS.options CS.humanString CS.fromString CS.toString cfg.status (GotStatusConnectorInitial 1 >> CPModules)
+                , viewTypedSelect CS.options CS.humanString CS.fromString CS.toString cfg.status (GotStatusChangeStatus ind cfg >> ActionForm)
                 ]
             ]
 
         A.AUTHORIZE cfg ->
-            [ viewTextInput "id_tag" "ID Tag" cfg.idTag (InternalConfig << GotWsEndpoint) ]
+            [ viewTextInput "id_tag" "ID Tag" cfg.idTag (GotAuthorizeIdTag ind cfg >> ActionForm) ]
 
         A.START_TRANSACTION cfg ->
-            [ viewIntInput "connector" "Connector" cfg.connector (GotHeartbeatDefaultInterval >> CPModules)
-            , viewTextInput "id_tag" "ID Tag" cfg.idTag (InternalConfig << GotWsEndpoint)
+            [ viewIntInput "connector" "Connector" cfg.connector (GotStartTransactionConnector ind cfg >> ActionForm)
+            , viewTextInput "id_tag" "ID Tag" cfg.idTag (GotStartTransactionIdTag ind cfg >> ActionForm)
             ]
 
         A.STOP_TRANSACTION cfg ->
-            [ viewTextInput "id_tag" "ID Tag" cfg.idTag (InternalConfig << GotWsEndpoint) ]
+            [ viewTextInput "id_tag" "ID Tag" cfg.idTag (GotStopTransactionIdTag ind cfg >> ActionForm) ]
 
         A.CHARGE_PERIOD cfg _ ->
-            [ viewIntInput "vehicle_power_capacity" "Vehicle Power Capacity (Power Limit, W)" cfg.vehiclePowerCapacity (GotHeartbeatDefaultInterval >> CPModules)
-            , viewIntInput "period" "Period (s)" cfg.period (GotHeartbeatDefaultInterval >> CPModules)
-            , viewIntInput "vehicle_battery_capacity" "Vehicle Battery Capacity (Charging Limit, Wh)" cfg.vehicleBatteryCapacity (GotHeartbeatDefaultInterval >> CPModules)
-
-            -- TODO: float
-            , viewIntInput "initial_vehicle_charge" "Initial Vehicle Charge (Wh)" 1 (GotHeartbeatDefaultInterval >> CPModules)
+            [ viewIntInput "vehicle_power_capacity" "Vehicle Power Capacity (Power Limit, W)" cfg.vehiclePowerCapacity (GotChargePeriodVehiclePowerCapacity ind cfg >> ActionForm)
+            , viewIntInput "period" "Period (s)" cfg.period (GotChargePeriodPeriod ind cfg >> ActionForm)
+            , viewIntInput "vehicle_battery_capacity" "Vehicle Battery Capacity (Charging Limit, Wh)" cfg.vehicleBatteryCapacity (GotChargePeriodVehicleBatteryCapacity ind cfg >> ActionForm)
+            , viewFloatInput "initial_vehicle_charge" "Initial Vehicle Charge (Wh)" cfg.initialVehicleCharge (GotChargePeriodInitialVehicleCharge ind cfg >> ActionForm)
 
             -- TODO: speedup typed select
             ]
-                ++ speedupCoeffInput cfg.speedup
+                ++ speedupCoeffInput ind cfg
 
         A.DELAY cfg ->
-            [ viewIntInput "interval" "Interval" cfg.interval (GotHeartbeatDefaultInterval >> CPModules) ]
+            [ viewIntInput "interval" "Interval" cfg.interval (GotDelayInterval ind cfg >> ActionForm) ]
 
 
-speedupCoeffInput : CPModuleActionsActionTypeChargePeriodConfigSpeedup -> List (Html Msg)
-speedupCoeffInput speedup =
-    case speedup of
+speedupCoeffInput : Int -> A.CPModuleActionsActionTypeChargePeriodConfig -> List (Html Msg)
+speedupCoeffInput ind cfg =
+    case cfg.speedup of
         A.IncreasePower coeff ->
-            [ viewIntInput "speedup_increase_power_coeff" "Speedup coefficient (more than 1.0 means faster)" 2 (GotHeartbeatDefaultInterval >> CPModules) ]
+            [ viewFloatInput "speedup_increase_power_coeff" "Speedup coefficient (more than 1.0 means faster)" coeff (A.IncreasePower >> GotChargePeriodSpeedup ind cfg >> ActionForm) ]
 
         A.TimeDilation coeff ->
-            [ viewIntInput "speedup_time_dilation_coeff" "Speedup coefficient (more than 1.0 means faster)" 2 (GotHeartbeatDefaultInterval >> CPModules) ]
+            [ viewFloatInput "speedup_time_dilation_coeff" "Speedup coefficient (more than 1.0 means faster)" coeff (A.IncreasePower >> GotChargePeriodSpeedup ind cfg >> ActionForm) ]
 
         A.None ->
             []
 
 
-actionListToolbox : Html Msg
-actionListToolbox =
+actionListToolbox : ActionsFormModelTab -> Html Msg
+actionListToolbox tab =
     div []
         [ ul [ class "nav nav-tabs" ]
-            [ li [ class "nav-item" ] [ button [ class "nav-link active" ] [ text "Templates" ] ]
-            , li [ class "nav-item" ] [ button [ class "nav-link" ] [ text "Actions" ] ]
+            [ li [ class "nav-item" ] [ button [ type_ "button", class "nav-link", classList [ ( "active", tab == Template ) ], onClick (SwitchToTab Template |> ActionForm) ] [ text "Templates" ] ]
+            , li [ class "nav-item" ] [ button [ type_ "button", class "nav-link", classList [ ( "active", tab == Actions ) ], onClick (SwitchToTab Actions |> ActionForm) ] [ text "Actions" ] ]
             ]
-        , div []
-            [ div [] [ text "Template content" ]
-            , div [] [ text "Actions content" ]
-            ]
+        , actionListToolboxContent tab
         ]
+
+
+actionListToolboxContent : ActionsFormModelTab -> Html Msg
+actionListToolboxContent tab =
+    case tab of
+        Template ->
+            div [] [ text "Template content" ]
+
+        Actions ->
+            div [] [ text "Actions content" ]
 
 
 viewSubmit : Html Msg
 viewSubmit =
-    button [ class "form-control btn btn-primary", type_ "button", onClick Submit ] [ text "Launch" ]
+    button [ type_ "button", class "form-control btn btn-primary", type_ "button", onClick Submit ] [ text "Launch" ]
 
 
 isModuleEnabled : Maybe a -> Bool
@@ -712,6 +825,14 @@ viewIntInput n t v e =
     div [ class "mb-3" ]
         [ label [ class "form-label", for n ] [ text t ]
         , input [ class "form-control", id n, type_ "number", value (String.fromInt v), onInput (String.toInt >> Maybe.withDefault v >> e) ] []
+        ]
+
+
+viewFloatInput : String -> String -> Float -> (Float -> Msg) -> Html Msg
+viewFloatInput n t v e =
+    div [ class "mb-3" ]
+        [ label [ class "form-label", for n ] [ text t ]
+        , input [ class "form-control", id n, type_ "number", value (String.fromFloat v), onInput (String.toFloat >> Maybe.withDefault v >> e) ] []
         ]
 
 

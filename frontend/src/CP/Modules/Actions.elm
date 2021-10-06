@@ -1,4 +1,4 @@
-module CP.Modules.Actions exposing (CPModuleActions, CPModuleActionsAction, CPModuleActionsActionStatus(..), CPModuleActionsActionType(..), CPModuleActionsActionTypeChargePeriodConfigSpeedup(..), CPModuleActionsBatch, CPModuleActionsConfig, configEncoder, cpModulesActionsDecoder)
+module CP.Modules.Actions exposing (CPModuleActions, CPModuleActionsAction, CPModuleActionsActionStatus(..), CPModuleActionsActionType(..), CPModuleActionsActionTypeAuthorizeConfig, CPModuleActionsActionTypeChargePeriodConfig, CPModuleActionsActionTypeChargePeriodConfigSpeedup(..), CPModuleActionsActionTypeDelayConfig, CPModuleActionsActionTypeStartTransactionConfig, CPModuleActionsActionTypeStatusChangeConfig, CPModuleActionsActionTypeStopTransactionConfig, CPModuleActionsBatch, CPModuleActionsConfig, configEncoder, cpModulesActionsDecoder)
 
 import CP.Modules.Status.OCPPConnectorStatus as OCPPConnectorStatus exposing (OCPPConnectorStatus)
 import Json.Decode as D
