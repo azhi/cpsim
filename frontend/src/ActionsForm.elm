@@ -6,6 +6,7 @@ import Css
 import Html.Styled exposing (..)
 import Html.Styled.Attributes exposing (checked, class, classList, css, disabled, for, id, multiple, selected, type_, value)
 import Html.Styled.Events exposing (on, onCheck, onClick, onInput)
+import Html5.DragDrop as DragDrop
 
 
 type Tab
@@ -17,15 +18,22 @@ type Template
     = VehicleCharge
 
 
+type NewElement
+    = NewAction A.CPModuleActionsAction
+    | NewTemplate Template
+
+
 type alias Model =
     { actions : List CPModuleActionsAction
     , selectedTab : Tab
+    , insertDragDrop : DragDrop.Model NewElement Int
+    , reorderDragDrop : DragDrop.Model ( CPModuleActionsAction, Int ) Int
     }
 
 
 default : Model
 default =
-    Model [] Template
+    Model [] Template DragDrop.init DragDrop.init
 
 
 defaultAction : A.CPModuleActionsActionType -> A.CPModuleActionsAction
@@ -84,6 +92,8 @@ template tpl =
 
 type Msg
     = SwitchToTab Tab
+    | InsertDragDropMsg (DragDrop.Msg NewElement Int)
+    | ReorderDragDropMsg (DragDrop.Msg ( A.CPModuleActionsAction, Int ) Int)
     | GotStatusChangeConnector Int A.CPModuleActionsActionTypeStatusChangeConfig Int
     | GotStatusChangeStatus Int A.CPModuleActionsActionTypeStatusChangeConfig CS.OCPPConnectorStatus
     | GotAuthorizeIdTag Int A.CPModuleActionsActionTypeAuthorizeConfig String
@@ -96,13 +106,8 @@ type Msg
     | GotChargePeriodInitialVehicleCharge Int A.CPModuleActionsActionTypeChargePeriodConfig Float
     | GotChargePeriodSpeedup Int A.CPModuleActionsActionTypeChargePeriodConfig A.CPModuleActionsActionTypeChargePeriodConfigSpeedup
     | GotDelayInterval Int A.CPModuleActionsActionTypeDelayConfig Int
-    | NewStatusChange
-    | NewAuthorize
-    | NewStartTransaction
-    | NewStopTransaction
-    | NewChargePeriod
-    | NewDelay
-    | NewTemplate Template
+    | GotNewElement NewElement
+    | GotDeleteElement Int
 
 
 update : Msg -> Model -> Model
@@ -110,6 +115,55 @@ update msg model =
     case msg of
         SwitchToTab tab ->
             { model | selectedTab = tab }
+
+        InsertDragDropMsg subMsg ->
+            let
+                ( dragDropModel, result ) =
+                    DragDrop.update subMsg model.insertDragDrop
+            in
+            case result of
+                Nothing ->
+                    { model | insertDragDrop = dragDropModel }
+
+                Just ( newEl, ind, _ ) ->
+                    { model
+                        | insertDragDrop = dragDropModel
+                        , actions = List.take ind model.actions ++ updateNewElToActions newEl ++ List.drop ind model.actions
+                    }
+
+        ReorderDragDropMsg subMsg ->
+            let
+                ( dragDropModel, result ) =
+                    DragDrop.update subMsg model.reorderDragDrop
+            in
+            case result of
+                Nothing ->
+                    { model | reorderDragDrop = dragDropModel }
+
+                Just ( ( movedAction, fromInd ), toInd, _ ) ->
+                    let
+                        indexedActions =
+                            List.indexedMap Tuple.pair model.actions
+
+                        reorderedActions =
+                            List.foldr
+                                (\( ind, action ) acc ->
+                                    if fromInd == ind then
+                                        acc
+
+                                    else if toInd == ind then
+                                        movedAction :: (action :: acc)
+
+                                    else
+                                        action :: acc
+                                )
+                                []
+                                indexedActions
+                    in
+                    { model
+                        | reorderDragDrop = dragDropModel
+                        , actions = reorderedActions
+                    }
 
         GotStatusChangeConnector ind cfg int ->
             updateAction ind (A.STATUS_CHANGE { cfg | connector = int }) model
@@ -147,26 +201,21 @@ update msg model =
         GotDelayInterval ind cfg int ->
             updateAction ind (A.DELAY { cfg | interval = int }) model
 
-        NewStatusChange ->
-            { model | actions = model.actions ++ [ defaultStatusChange ] }
+        GotNewElement newEl ->
+            { model | actions = model.actions ++ updateNewElToActions newEl }
 
-        NewAuthorize ->
-            { model | actions = model.actions ++ [ defaultAuthorize ] }
+        GotDeleteElement ind ->
+            { model | actions = List.take ind model.actions ++ List.drop (ind + 1) model.actions }
 
-        NewStartTransaction ->
-            { model | actions = model.actions ++ [ defaultStartTransaction ] }
 
-        NewStopTransaction ->
-            { model | actions = model.actions ++ [ defaultStopTransaction ] }
-
-        NewChargePeriod ->
-            { model | actions = model.actions ++ [ defaultChargePeriod ] }
-
-        NewDelay ->
-            { model | actions = model.actions ++ [ defaultDelay ] }
+updateNewElToActions : NewElement -> List A.CPModuleActionsAction
+updateNewElToActions newEl =
+    case newEl of
+        NewAction action ->
+            [ action ]
 
         NewTemplate tpl ->
-            { model | actions = model.actions ++ template tpl }
+            template tpl
 
 
 updateAction : Int -> A.CPModuleActionsActionType -> Model -> Model
@@ -192,23 +241,128 @@ fillBgColor =
     Css.backgroundColor <| Css.hex "77acfc"
 
 
+ghostBgColor : Css.Style
+ghostBgColor =
+    Css.backgroundColor <| Css.hex "adcdfd"
+
+
 view : Model -> Html Msg
 view model =
+    let
+        maybeInsertDropInfo =
+            Maybe.map2
+                Tuple.pair
+                (DragDrop.getDragId model.insertDragDrop)
+                (DragDrop.getDropId model.insertDragDrop)
+
+        maybeReorderDropInfo =
+            Maybe.map2
+                Tuple.pair
+                (DragDrop.getDragId model.reorderDragDrop)
+                (DragDrop.getDropId model.reorderDragDrop)
+    in
     div [ class "d-flex" ]
-        [ viewForm model.actions
+        [ viewForm maybeInsertDropInfo maybeReorderDropInfo model.actions
         , viewToolbox model.selectedTab
         ]
 
 
-viewForm : List CPModuleActionsAction -> Html Msg
-viewForm actions =
-    div [ class "p-3 bg-light flex-grow-1 me-3" ] <| List.indexedMap actionForm actions
+viewForm : Maybe ( NewElement, Int ) -> Maybe ( ( CPModuleActionsAction, Int ), Int ) -> List CPModuleActionsAction -> Html Msg
+viewForm maybeInsertDropInfo maybeReorderDropInfo actions =
+    let
+        maybeDroppable =
+            if List.isEmpty actions then
+                DragDrop.droppable InsertDragDropMsg 0 |> List.map Html.Styled.Attributes.fromUnstyled
+
+            else
+                []
+    in
+    div (class "p-3 bg-light flex-grow-1 me-3" :: maybeDroppable) <| List.indexedMap (actionItem maybeInsertDropInfo maybeReorderDropInfo) actions
 
 
-actionForm : Int -> CPModuleActionsAction -> Html Msg
-actionForm ind action =
-    div [ class "my-3 p-1 border border-primary border-3 rounded-3", css [ fillBgColor ] ]
-        [ h4 [] [ text <| actionTitle action ]
+actionItem : Maybe ( NewElement, Int ) -> Maybe ( ( CPModuleActionsAction, Int ), Int ) -> Int -> CPModuleActionsAction -> Html Msg
+actionItem maybeInsertDropInfo maybeReorderDropInfo ind action =
+    let
+        maybeInsertDropGhost =
+            Maybe.map
+                (\( newEl, dropInd ) ->
+                    if dropInd == ind then
+                        case newEl of
+                            NewAction act ->
+                                [ ghostActionItemForm ind act ]
+
+                            NewTemplate tpl ->
+                                []
+
+                    else
+                        []
+                )
+                maybeInsertDropInfo
+                |> Maybe.withDefault []
+
+        maybeReorderDropGhost =
+            Maybe.map
+                (\( ( movedAction, fromInd ), toInd ) ->
+                    if toInd == ind then
+                        [ ghostActionItemForm ind movedAction ]
+
+                    else
+                        []
+                )
+                maybeReorderDropInfo
+                |> Maybe.withDefault []
+
+        maybeRealForm =
+            Maybe.map
+                (\( ( movedAction, fromInd ), toInd ) ->
+                    if fromInd == ind then
+                        []
+
+                    else
+                        [ realActionItemForm ind action ]
+                )
+                maybeReorderDropInfo
+                |> Maybe.withDefault [ realActionItemForm ind action ]
+    in
+    div [] (maybeReorderDropGhost ++ maybeInsertDropGhost ++ maybeRealForm)
+
+
+realActionItemForm : Int -> CPModuleActionsAction -> Html Msg
+realActionItemForm =
+    actionItemForm (Css.borderStyle Css.solid) fillBgColor
+
+
+ghostActionItemForm : Int -> CPModuleActionsAction -> Html Msg
+ghostActionItemForm =
+    actionItemForm (Css.borderStyle Css.dashed) ghostBgColor
+
+
+actionItemForm : Css.Style -> Css.Style -> Int -> CPModuleActionsAction -> Html Msg
+actionItemForm borderStyle bgColor ind action =
+    let
+        insertDroppable =
+            DragDrop.droppable InsertDragDropMsg ind
+
+        reorderDroppable =
+            DragDrop.droppable ReorderDragDropMsg ind
+
+        reorderDraggable =
+            DragDrop.draggable ReorderDragDropMsg ( action, ind )
+
+        dragDroppable =
+            insertDroppable
+                ++ reorderDroppable
+                ++ reorderDraggable
+                |> List.map Html.Styled.Attributes.fromUnstyled
+    in
+    div
+        ([ class "my-3 p-1 border-primary border-3 rounded-3", css [ borderStyle, bgColor ] ]
+            ++ dragDroppable
+        )
+        [ div [ class "d-flex" ]
+            [ h4 [ class "flex-grow-1" ] [ text <| actionTitle action ]
+            , button [ class "form-control mx-1", type_ "button", onClick (GotDeleteElement ind), css [ Css.borderStyle Css.none, Css.width (Css.px 100), bgColor ] ] [ i [ class "fas fa-times", css [ Css.color <| Css.hex "ff5555" ] ] [] ]
+            ]
         , div [ class "d-flex flex-wrap align-content-around align-items-center" ] <| actionInputs ind action
         ]
 
@@ -304,28 +458,42 @@ viewToolboxContent tab =
                 ]
 
             Actions ->
-                [ viewToolboxAction "Status Change" NewStatusChange
-                , viewToolboxAction "Authorize" NewAuthorize
-                , viewToolboxAction "Start Transaction" NewStartTransaction
-                , viewToolboxAction "Stop Transaction" NewStopTransaction
-                , viewToolboxAction "Charge Period" NewChargePeriod
-                , viewToolboxAction "Delay" NewDelay
+                [ viewToolboxAction "Status Change" (NewAction defaultStatusChange)
+                , viewToolboxAction "Authorize" (NewAction defaultAuthorize)
+                , viewToolboxAction "Start Transaction" (NewAction defaultStartTransaction)
+                , viewToolboxAction "Stop Transaction" (NewAction defaultStopTransaction)
+                , viewToolboxAction "Charge Period" (NewAction defaultChargePeriod)
+                , viewToolboxAction "Delay" (NewAction defaultDelay)
                 ]
 
 
-viewToolboxAction : String -> Msg -> Html Msg
-viewToolboxAction title msg =
-    div [ class "my-3 p-1 border border-primary border-3 rounded-3", css [ fillBgColor ] ]
+viewToolboxAction : String -> NewElement -> Html Msg
+viewToolboxAction title newEl =
+    let
+        draggable =
+            DragDrop.draggable InsertDragDropMsg newEl |> List.map Html.Styled.Attributes.fromUnstyled
+    in
+    div
+        ([ class "my-3 p-1 border border-primary border-3 rounded-3", css [ fillBgColor ] ]
+            ++ draggable
+        )
         [ span [] [ text title ]
-        , button [ class "form-control", type_ "button", onClick msg, css [ Css.borderStyle Css.none, fillBgColor ] ] [ i [ class "fas fa-plus" ] [ text "Add" ] ]
+        , button [ class "form-control", type_ "button", onClick (GotNewElement newEl), css [ Css.borderStyle Css.none, fillBgColor ] ] [ i [ class "fas fa-plus" ] [ text "Add" ] ]
         ]
 
 
-viewToolboxTemplate : String -> Msg -> Html Msg
-viewToolboxTemplate title msg =
-    div [ class "my-3 p-1 border border-primary border-3 rounded-3", css [ fillBgColor ] ]
+viewToolboxTemplate : String -> NewElement -> Html Msg
+viewToolboxTemplate title newEl =
+    let
+        draggable =
+            DragDrop.draggable InsertDragDropMsg newEl |> List.map Html.Styled.Attributes.fromUnstyled
+    in
+    div
+        ([ class "my-3 p-1 border border-primary border-3 rounded-3", css [ fillBgColor ] ]
+            ++ draggable
+        )
         [ span [] [ text title ]
-        , button [ class "form-control", type_ "button", onClick msg, css [ Css.borderStyle Css.none, fillBgColor ] ] [ i [ class "fas fa-plus" ] [ text "Add" ] ]
+        , button [ class "form-control", type_ "button", onClick (GotNewElement newEl), css [ Css.borderStyle Css.none, fillBgColor ] ] [ i [ class "fas fa-plus" ] [ text "Add" ] ]
         ]
 
 
