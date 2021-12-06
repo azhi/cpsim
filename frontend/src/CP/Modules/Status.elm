@@ -1,4 +1,4 @@
-module CP.Modules.Status exposing (CPModuleStatus, CPModuleStatusConfig, configEncoder, cpModulesStatusDecoder)
+module CP.Modules.Status exposing (CPModuleStatus, CPModuleStatusConfig, CPModuleStatusState, CPModuleStatusStateMaybeReported(..), configEncoder, cpModulesStatusDecoder)
 
 import CP.Modules.Status.OCPPConnectorStatus as CS exposing (OCPPConnectorStatus)
 import CP.Modules.Status.OCPPStatus as S exposing (OCPPStatus)

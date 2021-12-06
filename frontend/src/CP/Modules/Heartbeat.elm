@@ -1,4 +1,4 @@
-module CP.Modules.Heartbeat exposing (CPModuleHeartbeat, CPModuleHeartbeatConfig, configEncoder, cpModulesHeartbeatDecoder)
+module CP.Modules.Heartbeat exposing (CPModuleHeartbeat, CPModuleHeartbeatConfig, CPModuleHeartbeatState, configEncoder, cpModulesHeartbeatDecoder)
 
 import Json.Decode as D
 import Json.Decode.Extra as DE
