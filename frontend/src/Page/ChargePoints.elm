@@ -2,10 +2,10 @@ module Page.ChargePoints exposing (Model, Msg, init, subscriptions, toSession, u
 
 import CP exposing (CP, cpDecoder)
 import CP.InternalConfig exposing (CPInternalConfig)
-import CP.Modules.Actions exposing (CPModuleActions)
-import CP.Modules.Commands exposing (CPModuleCommands)
+import CP.Modules.Actions as A exposing (CPModuleActions, CPModuleActionsConfig, CPModuleActionsState)
+import CP.Modules.Commands as C exposing (CPModuleCommands)
 import CP.Modules.Connection exposing (CPModuleConnection, CPModuleConnectionConfig, CPModuleConnectionState(..), OCPPCall, OCPPCallStatus(..))
-import CP.Modules.Heartbeat exposing (CPModuleHeartbeat, CPModuleHeartbeatState)
+import CP.Modules.Heartbeat exposing (CPModuleHeartbeat, CPModuleHeartbeatConfig, CPModuleHeartbeatState)
 import CP.Modules.Status exposing (CPModuleStatus, CPModuleStatusConfig, CPModuleStatusState, CPModuleStatusStateMaybeReported(..))
 import CP.Modules.Status.OCPPConnectorStatus as CS
 import CP.Modules.Status.OCPPStatus as S
@@ -443,11 +443,78 @@ viewActionsWidget a =
     let
         header =
             [ text <| "Actions: " ++ (List.length a.state.queue |> String.fromInt) ++ " in queue" ]
-
-        body =
-            [ text "BODY" ]
     in
-    viewCpWidget header body
+    viewCpWidget header (viewActionsWidgetBody a)
+
+
+viewActionsWidgetBody : CPModuleActions -> List (Html Msg)
+viewActionsWidgetBody a =
+    viewActionsWidgetBodyState a.state
+        ++ viewActionsWidgetBodyConfig a.config
+
+
+viewActionsWidgetBodyState : CPModuleActionsState -> List (Html Msg)
+viewActionsWidgetBodyState st =
+    [ p []
+        [ span [] [ text "Current Transaction ID: " ]
+        , strong [] [ text <| Maybe.withDefault "(None)" st.startedTransactionId ]
+        ]
+    , p []
+        [ span [] [ text "Current Transaction Connector: " ]
+        , strong [] [ text (st.startedTransactionConnector |> Maybe.map String.fromInt |> Maybe.withDefault "(None)") ]
+        ]
+    , viewActionsWidgetBodyStateQueue st
+    ]
+
+
+viewActionsWidgetBodyStateQueue : CPModuleActionsState -> Html Msg
+viewActionsWidgetBodyStateQueue st =
+    case st.status of
+        A.Idle ->
+            p [] [ text "IDLE" ]
+
+        A.Executing { instructionPointer } ->
+            let
+                batch =
+                    (List.drop batchInd >> List.head >> Maybe.withDefault (A.CPModuleActionsBatch [])) st.queue
+
+                ( batchInd, instrInd ) =
+                    instructionPointer
+            in
+            Html.Styled.table [ class "table table-stripped caption-top" ]
+                [ caption [] [ text "Executing" ]
+                , thead []
+                    [ tr []
+                        [ th [ attribute "scope" "col" ] [ text "Current" ]
+                        , th [ attribute "scope" "col" ] [ text "Type" ]
+                        , th [ attribute "scope" "col" ] [ text "Config" ]
+                        , th [ attribute "scope" "col" ] [ text "State" ]
+                        ]
+                    ]
+                , tbody [] <|
+                    List.indexedMap
+                        (\ind a ->
+                            tr []
+                                [ td []
+                                    [ text <|
+                                        if ind == instrInd then
+                                            "*"
+
+                                        else
+                                            ""
+                                    ]
+                                , td [] [ text <| A.humanString a.typ ]
+                                , td [] [ text "-" ]
+                                , td [] [ text "-" ]
+                                ]
+                        )
+                        batch.actions
+                ]
+
+
+viewActionsWidgetBodyConfig : CPModuleActionsConfig -> List (Html Msg)
+viewActionsWidgetBodyConfig c =
+    [ text "YYY" ]
 
 
 viewHeartbeatWidget : CPModuleHeartbeat -> Html Msg
@@ -455,11 +522,69 @@ viewHeartbeatWidget h =
     let
         header =
             [ text <| "Heartbeat: " ++ viewHeartbeatShortStr h.state ]
-
-        body =
-            [ text "BODY" ]
     in
-    viewCpWidget header body
+    viewCpWidget header (viewHeartbeatWidgetBody h)
+
+
+viewHeartbeatWidgetBody : CPModuleHeartbeat -> List (Html Msg)
+viewHeartbeatWidgetBody h =
+    viewHeartbeatWidgetBodyState h.state
+        ++ viewHeartbeatWidgetBodyConfig h.config
+
+
+viewHeartbeatWidgetBodyState : CPModuleHeartbeatState -> List (Html Msg)
+viewHeartbeatWidgetBodyState s =
+    [ Html.Styled.table [ class "table table-stripped" ]
+        [ thead []
+            [ tr []
+                [ th [ attribute "scope" "col" ] [ text "Key" ]
+                , th [ attribute "scope" "col" ] [ text "Value" ]
+                , th [ attribute "scope" "col" ] [ text "Unit" ]
+                ]
+            ]
+        , tbody [] <|
+            [ tr []
+                [ td [] [ text "Interval" ]
+                , td [] [ text <| String.fromInt s.interval ]
+                , td [] [ text "s" ]
+                ]
+            , tr []
+                [ td [] [ text "Last Message At" ]
+                , td [] [ text (s.lastMessageAt |> Maybe.map Iso8601.fromTime |> Maybe.withDefault "(None)") ]
+                , td [] [ text "" ]
+                ]
+            , tr []
+                [ td [] [ text "Last Heartbeat At" ]
+                , td [] [ text (s.lastHeartbeatAt |> Maybe.map Iso8601.fromTime |> Maybe.withDefault "(None)") ]
+                , td [] [ text "" ]
+                ]
+            ]
+        ]
+    ]
+
+
+viewHeartbeatWidgetBodyConfig : CPModuleHeartbeatConfig -> List (Html Msg)
+viewHeartbeatWidgetBodyConfig c =
+    [ viewSpoiler False
+        [ text "Status module config" ]
+        [ Html.Styled.table [ class "table table-stripped" ]
+            [ thead []
+                [ tr []
+                    [ th [ attribute "scope" "col" ] [ text "Key" ]
+                    , th [ attribute "scope" "col" ] [ text "Value" ]
+                    , th [ attribute "scope" "col" ] [ text "Unit" ]
+                    ]
+                ]
+            , tbody [] <|
+                [ tr []
+                    [ td [] [ text "Default Interval" ]
+                    , td [] [ text <| String.fromInt c.defaultInterval ]
+                    , td [] [ text "s" ]
+                    ]
+                ]
+            ]
+        ]
+    ]
 
 
 roundFloat : Int -> Float -> Float
@@ -479,11 +604,58 @@ viewInternalConfigWidget ic =
     let
         header =
             [ text <| "Internal Config: Connector meters " ++ (List.map (roundFloat 2 >> String.fromFloat) ic.connectorMeters |> String.join ", ") ]
-
-        body =
-            [ text "BODY" ]
     in
-    viewCpWidget header body
+    viewCpWidget header (viewInternalConfigWidgetBody ic)
+
+
+viewInternalConfigWidgetBody : CPInternalConfig -> List (Html Msg)
+viewInternalConfigWidgetBody ic =
+    [ Html.Styled.table [ class "table table-stripped" ]
+        [ thead []
+            [ tr []
+                [ th [ attribute "scope" "col" ] [ text "Key" ]
+                , th [ attribute "scope" "col" ] [ text "Value" ]
+                , th [ attribute "scope" "col" ] [ text "Unit" ]
+                ]
+            ]
+        , tbody [] <|
+            [ tr []
+                [ td [] [ text "WS Endpoint" ]
+                , td [] [ text ic.wsEndpoint ]
+                , td [] [ text "" ]
+                ]
+            , tr []
+                [ td [] [ text "Vendor" ]
+                , td [] [ text ic.vendor ]
+                , td [] [ text "" ]
+                ]
+            , tr []
+                [ td [] [ text "Model" ]
+                , td [] [ text ic.model ]
+                , td [] [ text "" ]
+                ]
+            , tr []
+                [ td [] [ text "Firmware Version" ]
+                , td [] [ text <| Maybe.withDefault "(None)" ic.fwVersion ]
+                , td [] [ text "" ]
+                ]
+            , tr []
+                [ td [] [ text "Power Limit" ]
+                , td [] [ text <| String.fromInt ic.powerLimit ]
+                , td [] [ text "W" ]
+                ]
+            ]
+                ++ List.indexedMap
+                    (\ind meter ->
+                        tr []
+                            [ td [] [ text <| "Connector " ++ String.fromInt (ind + 1) ++ " Meter" ]
+                            , td [] [ text <| (roundFloat 2 >> String.fromFloat) meter ]
+                            , td [] [ text "kWh" ]
+                            ]
+                    )
+                    ic.connectorMeters
+        ]
+    ]
 
 
 viewOCPPConfigWidget : CPOCPPConfig -> Html Msg
@@ -491,11 +663,40 @@ viewOCPPConfigWidget c =
     let
         header =
             [ text <| "OCPP Config: " ++ (List.length c.items |> String.fromInt) ++ " Item(s)" ]
-
-        body =
-            [ text "BODY" ]
     in
-    viewCpWidget header body
+    viewCpWidget header (viewOCPPConfigWidgetBody c)
+
+
+viewOCPPConfigWidgetBody : CPOCPPConfig -> List (Html Msg)
+viewOCPPConfigWidgetBody c =
+    [ Html.Styled.table [ class "table table-stripped" ]
+        [ thead []
+            [ tr []
+                [ th [ attribute "scope" "col" ] [ text "Key" ]
+                , th [ attribute "scope" "col" ] [ text "Value" ]
+                , th [ attribute "scope" "col" ] [ text "Readonly" ]
+                ]
+            ]
+        , tbody [] <|
+            List.map
+                (\ci ->
+                    tr []
+                        [ td [] [ text ci.key ]
+                        , td [] [ text <| Maybe.withDefault "(None)" ci.value ]
+                        , td []
+                            [ text
+                                (if ci.readonly then
+                                    "Yes"
+
+                                 else
+                                    "No"
+                                )
+                            ]
+                        ]
+                )
+                c.items
+        ]
+    ]
 
 
 viewCommandsWidget : CPModuleCommands -> Html Msg
@@ -503,11 +704,37 @@ viewCommandsWidget c =
     let
         header =
             [ text <| "Commands: " ++ (List.length c.config.supportedCommands |> String.fromInt) ++ " enabled" ]
-
-        body =
-            [ text "BODY" ]
     in
-    viewCpWidget header body
+    viewCpWidget header (viewCommandsWidgetBody c)
+
+
+viewCommandsWidgetBody : CPModuleCommands -> List (Html Msg)
+viewCommandsWidgetBody c =
+    [ Html.Styled.table [ class "table table-stripped" ]
+        [ thead []
+            [ tr []
+                [ th [ attribute "scope" "col" ] [ text "Command" ]
+                , th [ attribute "scope" "col" ] [ text "Supported" ]
+                ]
+            ]
+        , tbody [] <|
+            List.map
+                (\cmd ->
+                    tr []
+                        [ td [] [ text <| C.humanString cmd ]
+                        , td []
+                            [ text <|
+                                if List.member cmd c.config.supportedCommands then
+                                    "Yes"
+
+                                else
+                                    "No"
+                            ]
+                        ]
+                )
+                C.availableCommands
+        ]
+    ]
 
 
 viewCpWidget : List (Html Msg) -> List (Html Msg) -> Html Msg

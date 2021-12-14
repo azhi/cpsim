@@ -1,4 +1,4 @@
-module CP.Modules.Actions exposing (CPModuleActions, CPModuleActionsAction, CPModuleActionsActionStatus(..), CPModuleActionsActionType(..), CPModuleActionsActionTypeAuthorizeConfig, CPModuleActionsActionTypeChargePeriodConfig, CPModuleActionsActionTypeChargePeriodConfigSpeedup(..), CPModuleActionsActionTypeDelayConfig, CPModuleActionsActionTypeStartTransactionConfig, CPModuleActionsActionTypeStatusChangeConfig, CPModuleActionsActionTypeStopTransactionConfig, CPModuleActionsBatch, CPModuleActionsConfig, configEncoder, cpModulesActionsDecoder)
+module CP.Modules.Actions exposing (CPModuleActions, CPModuleActionsAction, CPModuleActionsActionStatus(..), CPModuleActionsActionType(..), CPModuleActionsActionTypeAuthorizeConfig, CPModuleActionsActionTypeChargePeriodConfig, CPModuleActionsActionTypeChargePeriodConfigSpeedup(..), CPModuleActionsActionTypeDelayConfig, CPModuleActionsActionTypeStartTransactionConfig, CPModuleActionsActionTypeStatusChangeConfig, CPModuleActionsActionTypeStopTransactionConfig, CPModuleActionsBatch, CPModuleActionsConfig, CPModuleActionsState, CPModuleActionsStateStatus(..), configEncoder, cpModulesActionsDecoder, humanString)
 
 import CP.Modules.Status.OCPPConnectorStatus as OCPPConnectorStatus exposing (OCPPConnectorStatus)
 import Json.Decode as D
@@ -108,6 +108,28 @@ type alias CPModuleActionsState =
 type CPModuleActionsStateStatus
     = Idle
     | Executing { instructionPointer : ( Int, Int ) }
+
+
+humanString : CPModuleActionsActionType -> String
+humanString actionType =
+    case actionType of
+        STATUS_CHANGE _ ->
+            "Status Change"
+
+        AUTHORIZE _ ->
+            "Authorize"
+
+        START_TRANSACTION _ ->
+            "Start Transaction"
+
+        STOP_TRANSACTION _ ->
+            "Stop Transaction"
+
+        CHARGE_PERIOD _ _ ->
+            "Charge Period"
+
+        DELAY _ ->
+            "Delay"
 
 
 cpModulesActionsDecoder : D.Decoder (Maybe CPModuleActions)

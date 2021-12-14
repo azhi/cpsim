@@ -1,4 +1,4 @@
-module CP.Modules.Commands exposing (CPModuleCommands, CPModuleCommandsCommand(..), CPModuleCommandsConfig, configEncoder, cpModulesCommandsDecoder, fromString, humanString, options, toString)
+module CP.Modules.Commands exposing (CPModuleCommands, CPModuleCommandsCommand(..), CPModuleCommandsConfig, availableCommands, configEncoder, cpModulesCommandsDecoder, fromString, humanString, options, toString)
 
 import Json.Decode as D
 import Json.Decode.Pipeline exposing (custom, hardcoded, optional, required)
@@ -15,6 +15,10 @@ type CPModuleCommandsCommand
     | GET_CONFIGURATION
     | RESET
     | TRIGGER_MESSAGE
+
+
+availableCommands =
+    [ CHANGE_CONFIGURATION, GET_CONFIGURATION, RESET, TRIGGER_MESSAGE ]
 
 
 type alias CPModuleCommandsConfig =
