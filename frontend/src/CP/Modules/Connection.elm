@@ -1,4 +1,4 @@
-module CP.Modules.Connection exposing (CPModuleConnection, CPModuleConnectionConfig, CPModuleConnectionState(..), configEncoder, cpModulesConnectionDecoder)
+module CP.Modules.Connection exposing (CPModuleConnection, CPModuleConnectionConfig, CPModuleConnectionState(..), OCPPCall, OCPPCallStatus(..), configEncoder, cpModulesConnectionDecoder)
 
 import Json.Decode as D
 import Json.Decode.Extra as DE

@@ -4,19 +4,20 @@ import CP exposing (CP, cpDecoder)
 import CP.InternalConfig exposing (CPInternalConfig)
 import CP.Modules.Actions exposing (CPModuleActions)
 import CP.Modules.Commands exposing (CPModuleCommands)
-import CP.Modules.Connection exposing (CPModuleConnection, CPModuleConnectionState(..))
+import CP.Modules.Connection exposing (CPModuleConnection, CPModuleConnectionConfig, CPModuleConnectionState(..), OCPPCall, OCPPCallStatus(..))
 import CP.Modules.Heartbeat exposing (CPModuleHeartbeat, CPModuleHeartbeatState)
-import CP.Modules.Status exposing (CPModuleStatus, CPModuleStatusState, CPModuleStatusStateMaybeReported(..))
+import CP.Modules.Status exposing (CPModuleStatus, CPModuleStatusConfig, CPModuleStatusState, CPModuleStatusStateMaybeReported(..))
 import CP.Modules.Status.OCPPConnectorStatus as CS
 import CP.Modules.Status.OCPPStatus as S
 import CP.OCPPConfig exposing (CPOCPPConfig)
-import Css exposing (..)
+import Css
 import Html.Styled exposing (..)
-import Html.Styled.Attributes exposing (class, classList, css)
+import Html.Styled.Attributes exposing (attribute, class, classList, css)
 import Html.Styled.Events exposing (onClick)
 import Http
 import Iso8601
 import Json.Decode as D
+import Json.Encode as E
 import Session exposing (Session)
 import Time
 
@@ -111,7 +112,7 @@ view model =
 
 viewSidebar : Model -> Html Msg
 viewSidebar model =
-    div [ class "d-flex flex-column", css [ width (px 380) ] ]
+    div [ class "d-flex flex-column", css [ Css.width (Css.px 380) ] ]
         [ div [ class "list-group list-group-flush scrollarea border-bottom" ]
             (viewSidebarCps model)
         ]
@@ -157,7 +158,7 @@ viewCpConnectionShortStr state =
             "BootNotification sent"
 
         Pending _ ->
-            "Pending (awaiting server commands)"
+            "Pending"
 
         Retry { connectionError, retryAt } ->
             "Retry (" ++ connectionError ++ ")"
@@ -239,33 +240,202 @@ viewConnectionWidget conn =
     let
         header =
             [ text <| "Connection: " ++ viewCpConnectionShortStr conn.state ]
-
-        body =
-            [ text "BODY" ]
     in
-    viewCpWidget header body
+    viewCpWidget header (viewConnectionWidgetBody conn)
+
+
+viewConnectionWidgetBody : CPModuleConnection -> List (Html Msg)
+viewConnectionWidgetBody conn =
+    viewConnectionWidgetBodyState conn.state
+        ++ viewConnectionWidgetBodyConfig conn.config
+
+
+viewConnectionWidgetBodyState : CPModuleConnectionState -> List (Html Msg)
+viewConnectionWidgetBodyState state =
+    case state of
+        Idle ->
+            [ p [] [ text "Idle" ] ]
+
+        WSInit ->
+            [ p [] [ text "Websocket Initialization" ] ]
+
+        BootNotification { outgoingCallQueue } ->
+            p [] [ text "BootNotification sent" ] :: viewConnectionWidgetCallQueue outgoingCallQueue
+
+        Pending { outgoingCallQueue } ->
+            p [] [ text "BootNotification Pending state (awaiting server commands)" ] :: viewConnectionWidgetCallQueue outgoingCallQueue
+
+        Retry { connectionError, retryAt } ->
+            [ p [] [ text "Connection failed:" ]
+            , p [] [ text connectionError ]
+            , p [] [ text <| "Will retry at " ++ Iso8601.fromTime retryAt ]
+            ]
+
+        Resetting { retryAt } ->
+            [ p [] [ text "Simulating reset" ]
+            , p [] [ text <| "Will connect at " ++ Iso8601.fromTime retryAt ]
+            ]
+
+        Done { outgoingCallQueue, currentTimeDiff } ->
+            [ p [] [ text "Connected" ]
+            , p [] [ text <| "Current time delay is " ++ String.fromFloat currentTimeDiff ++ " us" ]
+            ]
+                ++ viewConnectionWidgetCallQueue outgoingCallQueue
+
+
+viewConnectionWidgetBodyConfig : CPModuleConnectionConfig -> List (Html Msg)
+viewConnectionWidgetBodyConfig config =
+    [ viewSpoiler False
+        [ text "Connection module config" ]
+        [ Html.Styled.table [ class "table table-stripped" ]
+            [ thead []
+                [ tr []
+                    [ th [ attribute "scope" "col" ] [ text "Key" ]
+                    , th [ attribute "scope" "col" ] [ text "Value" ]
+                    , th [ attribute "scope" "col" ] [ text "Unit" ]
+                    ]
+                ]
+            , tbody []
+                [ tr []
+                    [ td [] [ text "Call Timeout Interval" ]
+                    , td [] [ text <| String.fromInt config.callTimeoutInterval ]
+                    , td [] [ text "s" ]
+                    ]
+                , tr []
+                    [ td [] [ text "Default Retry interval" ]
+                    , td [] [ text <| String.fromInt config.defaultRetryInterval ]
+                    , td [] [ text "s" ]
+                    ]
+                , tr []
+                    [ td [] [ text "Hard Reboot interval" ]
+                    , td [] [ text <| String.fromInt config.hardRebootInterval ]
+                    , td [] [ text "s" ]
+                    ]
+                , tr []
+                    [ td [] [ text "Soft Reboot interval" ]
+                    , td [] [ text <| String.fromInt config.softRebootInterval ]
+                    , td [] [ text "s" ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
+
+viewConnectionWidgetCallQueue : List OCPPCall -> List (Html Msg)
+viewConnectionWidgetCallQueue outgoingCallQueue =
+    if List.isEmpty outgoingCallQueue then
+        [ p [] [ text "Outgoing OCPP calls queue is empty" ] ]
+
+    else
+        [ viewSpoiler True
+            [ text "Outgoing OCPP calls queue" ]
+            [ Html.Styled.table [ class "table table-stripped" ]
+                [ thead []
+                    [ tr []
+                        [ th [ attribute "scope" "col" ] [ text "Sent?" ]
+                        , th [ attribute "scope" "col" ] [ text "ID" ]
+                        , th [ attribute "scope" "col" ] [ text "Action" ]
+                        , th [ attribute "scope" "col" ] [ text "Payload" ]
+                        ]
+                    ]
+                , tbody [] (List.map viewConnectionWidgetOCPPCall outgoingCallQueue)
+                ]
+            ]
+        ]
+
+
+viewConnectionWidgetOCPPCall : OCPPCall -> Html Msg
+viewConnectionWidgetOCPPCall call =
+    let
+        statusText =
+            case call.status of
+                Sent ->
+                    "Yes"
+
+                NotSent ->
+                    "No"
+    in
+    tr []
+        [ td [] [ text statusText ]
+        , td [] [ text call.id ]
+        , td [] [ text call.action ]
+        , td [] [ text <| E.encode 0 call.payload ]
+        ]
 
 
 viewStatusWidget : CPModuleStatus -> Html Msg
 viewStatusWidget st =
     let
         header =
-            [ span [] [ text "Status: " ]
-            , span [] [ text <| viewStatusShortStr S.humanString st.state.status ]
-            , br [] []
-            , span []
-                [ text <|
-                    "Connectors: "
-                        ++ (List.map (viewStatusShortStr CS.humanString) st.state.connectorStatuses
-                                |> String.join ", "
-                           )
-                ]
-            ]
-
-        body =
-            [ text "BODY" ]
+            [ text <| "Status: " ++ viewStatusShortStr S.humanString st.state.status ]
     in
-    viewCpWidget header body
+    viewCpWidget header (viewStatusWidgetBody st)
+
+
+viewStatusWidgetBody : CPModuleStatus -> List (Html Msg)
+viewStatusWidgetBody st =
+    viewStatusWidgetBodyState st.state
+        ++ viewStatusWidgetBodyConfig st.config
+
+
+viewStatusWidgetBodyState : CPModuleStatusState -> List (Html Msg)
+viewStatusWidgetBodyState state =
+    viewStatus S.humanString "ChargePoint (connector 0): " state.status :: List.indexedMap (viewConnectorStatus CS.humanString) state.connectorStatuses
+
+
+viewStatusWidgetBodyConfig : CPModuleStatusConfig -> List (Html Msg)
+viewStatusWidgetBodyConfig config =
+    [ viewSpoiler False
+        [ text "Status module config" ]
+        [ Html.Styled.table [ class "table table-stripped" ]
+            [ thead []
+                [ tr []
+                    [ th [ attribute "scope" "col" ] [ text "Key" ]
+                    , th [ attribute "scope" "col" ] [ text "Value" ]
+                    ]
+                ]
+            , tbody [] <|
+                tr []
+                    [ td [] [ text "Initial Charge Point Status" ]
+                    , td [] [ text <| S.humanString config.initialStatus ]
+                    ]
+                    :: List.indexedMap
+                        (\ind cs ->
+                            tr []
+                                [ td [] [ text <| "Initial Connector " ++ String.fromInt (ind + 1) ++ " Status" ]
+                                , td [] [ text <| CS.humanString cs ]
+                                ]
+                        )
+                        config.initialConnectorStatuses
+            ]
+        ]
+    ]
+
+
+viewConnectorStatus : (s -> String) -> Int -> CPModuleStatusStateMaybeReported s -> Html Msg
+viewConnectorStatus convertor ind =
+    viewStatus convertor ("Connector " ++ String.fromInt (ind + 1) ++ ": ")
+
+
+viewStatus : (s -> String) -> String -> CPModuleStatusStateMaybeReported s -> Html Msg
+viewStatus convertor prefix maybeReportedStatus =
+    case maybeReportedStatus of
+        REPORTED at status ->
+            viewSpoiler True
+                [ span [] [ text prefix ]
+                , strong [] [ text (convertor status) ]
+                ]
+                [ p [] [ text <| "Reported to server at " ++ Iso8601.fromTime at ]
+                ]
+
+        NOT_REPORTED status ->
+            viewSpoiler True
+                [ span [] [ text prefix ]
+                , strong [] [ text (convertor status) ]
+                ]
+                [ p [] [ text "Not yet reported to server" ]
+                ]
 
 
 viewActionsWidget : CPModuleActions -> Html Msg
@@ -345,6 +515,40 @@ viewCpWidget header body =
     div [ class "card me-3 mb-3" ]
         [ h5 [ class "card-header" ] header
         , div [ class "card-body" ] body
+        ]
+
+
+viewSpoiler : Bool -> List (Html Msg) -> List (Html Msg) -> Html Msg
+viewSpoiler preOpen title body =
+    let
+        attrs =
+            if preOpen then
+                [ attribute "open" "true" ]
+
+            else
+                []
+    in
+    details attrs <|
+        summary [ css [ viewSpoilerSummaryStyle ] ] title
+            :: body
+
+
+viewSpoilerSummaryStyle : Css.Style
+viewSpoilerSummaryStyle =
+    Css.batch
+        [ Css.width (Css.pct 100)
+        , Css.padding2 (Css.rem 0.5) Css.zero
+        , Css.borderTop3 (Css.px 1) Css.solid (Css.rgb 0 0 0)
+        , Css.position Css.relative
+        , Css.listStyle Css.none
+        , Css.outline Css.zero
+        , Css.after
+            [ Css.property "content" "'+'"
+            , Css.position Css.absolute
+            , Css.lineHeight Css.zero
+            , Css.marginTop (Css.rem 0.75)
+            , Css.right Css.zero
+            ]
         ]
 
 
