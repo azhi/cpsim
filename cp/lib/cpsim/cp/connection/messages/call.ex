@@ -29,4 +29,10 @@ defmodule CPSIM.CP.Connection.Messages.Call do
   def encode(%__MODULE__{id: id, action: action, payload: payload}) do
     [@type_id, id, action, payload]
   end
+
+  def format_response(%__MODULE__{} = call) do
+    call
+    |> Map.from_struct()
+    |> Map.take([:id, :action, :payload, :sent])
+  end
 end

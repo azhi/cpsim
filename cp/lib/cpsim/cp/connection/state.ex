@@ -23,5 +23,8 @@ defmodule CPSIM.CP.Connection.State do
     state
     |> Map.from_struct()
     |> Map.take([:status, :connection_error, :retry_at, :current_time_diff, :outgoing_call_queue])
+    |> Map.update!(:outgoing_call_queue, fn queue ->
+      Enum.map(queue, &CPSIM.CP.Connection.Messages.Call.format_response/1)
+    end)
   end
 end
