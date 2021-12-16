@@ -440,11 +440,38 @@ viewStatus convertor prefix maybeReportedStatus =
 
 viewActionsWidget : CPModuleActions -> Html Msg
 viewActionsWidget a =
-    let
-        header =
-            [ text <| "Actions: " ++ (List.length a.state.queue |> String.fromInt) ++ " in queue" ]
-    in
-    viewCpWidget header (viewActionsWidgetBody a)
+    viewCpWidget (viewActionsWidgetHeader a.state) (viewActionsWidgetBody a)
+
+
+viewActionsWidgetHeader : CPModuleActionsState -> List (Html Msg)
+viewActionsWidgetHeader st =
+    [ span [ css [ Css.display Css.inlineBlock, Css.maxWidth (Css.px 600) ] ]
+        (span [] [ text "Actions: " ]
+            :: (case st.status of
+                    A.Idle ->
+                        [ span [] [ text "IDLE" ] ]
+
+                    A.Executing { instructionPointer } ->
+                        let
+                            ( batchInd, instrInd ) =
+                                instructionPointer
+
+                            batch =
+                                (List.drop batchInd >> List.head >> Maybe.withDefault (A.CPModuleActionsBatch [])) st.queue
+
+                            maybeInstr =
+                                (List.drop instrInd >> List.head) batch.actions
+                        in
+                        case maybeInstr of
+                            Just action ->
+                                span [] [ text <| A.humanString action.typ ++ " " ]
+                                    :: viewActionConfig action.typ
+
+                            Nothing ->
+                                [ span [] [ text "None" ] ]
+               )
+        )
+    ]
 
 
 viewActionsWidgetBody : CPModuleActions -> List (Html Msg)
@@ -463,58 +490,186 @@ viewActionsWidgetBodyState st =
         [ span [] [ text "Current Transaction Connector: " ]
         , strong [] [ text (st.startedTransactionConnector |> Maybe.map String.fromInt |> Maybe.withDefault "(None)") ]
         ]
-    , viewActionsWidgetBodyStateQueue st
     ]
+        ++ viewActionsWidgetBodyStateQueue st
 
 
-viewActionsWidgetBodyStateQueue : CPModuleActionsState -> Html Msg
+viewActionsWidgetBodyStateQueue : CPModuleActionsState -> List (Html Msg)
 viewActionsWidgetBodyStateQueue st =
     case st.status of
         A.Idle ->
-            p [] [ text "IDLE" ]
+            [ p [] [ text "IDLE" ] ]
 
         A.Executing { instructionPointer } ->
             let
-                batch =
-                    (List.drop batchInd >> List.head >> Maybe.withDefault (A.CPModuleActionsBatch [])) st.queue
-
                 ( batchInd, instrInd ) =
                     instructionPointer
+
+                batch =
+                    (List.drop batchInd >> List.head >> Maybe.withDefault (A.CPModuleActionsBatch [])) st.queue
             in
-            Html.Styled.table [ class "table table-stripped caption-top" ]
-                [ caption [] [ text "Executing" ]
-                , thead []
+            [ p [] [ text "EXECUTING" ]
+            , viewActionsQueue instrInd batch.actions
+            ]
+
+
+viewActionsQueue : Int -> List A.CPModuleActionsAction -> Html Msg
+viewActionsQueue activeInd actions =
+    Html.Styled.table [ class "table table-stripped caption-top" ]
+        [ thead []
+            [ tr []
+                [ th [ attribute "scope" "col" ] [ text "Current" ]
+                , th [ attribute "scope" "col" ] [ text "Type" ]
+                , th [ attribute "scope" "col" ] [ text "Config" ]
+                , th [ attribute "scope" "col" ] [ text "State" ]
+                ]
+            ]
+        , tbody [] <|
+            List.indexedMap
+                (\ind a ->
+                    tr []
+                        [ td []
+                            [ if ind == activeInd then
+                                i [ class "fas fa-arrow-right", css [ Css.color <| Css.hex "2a0ffa" ] ] []
+
+                              else
+                                text ""
+                            ]
+                        , td [] [ text <| A.humanString a.typ ]
+                        , td [ css [ Css.maxWidth (Css.px 600) ] ] (viewActionConfig a.typ)
+                        , td [] (viewActionState a.typ)
+                        ]
+                )
+                actions
+        ]
+
+
+viewActionConfig : A.CPModuleActionsActionType -> List (Html Msg)
+viewActionConfig typ =
+    case typ of
+        A.STATUS_CHANGE { connector, status } ->
+            [ text <| "Set '" ++ CS.humanString status ++ "' for connector #" ++ String.fromInt connector ]
+
+        A.AUTHORIZE { idTag } ->
+            [ text idTag ]
+
+        A.START_TRANSACTION { connector, idTag } ->
+            [ text <| "Auth idTag " ++ idTag ++ " on connector #" ++ String.fromInt connector ]
+
+        A.STOP_TRANSACTION { idTag } ->
+            [ text <| "Auth idTag " ++ idTag ]
+
+        A.CHARGE_PERIOD { vehiclePowerCapacity, period, initialVehicleCharge, vehicleBatteryCapacity, speedup } _ ->
+            List.intersperse (span [] [ text "," ])
+                [ span [] [ text <| "For " ++ String.fromInt period ++ "s" ]
+                , span [] [ text <| "charge vehicle with power capacity " ++ String.fromInt vehiclePowerCapacity ++ "W" ]
+                , span [] [ text <| "battery capacity " ++ String.fromInt vehicleBatteryCapacity ++ "Wh" ]
+                , span [] [ text <| "initial charge " ++ (roundFloat 2 >> String.fromFloat) initialVehicleCharge ++ "Wh" ]
+                , span [] [ text <| "speedup " ++ viewActionConfigSpeedup speedup ]
+                ]
+
+        A.DELAY { interval } ->
+            [ text <| String.fromInt interval ++ " seconds" ]
+
+
+viewActionState : A.CPModuleActionsActionType -> List (Html Msg)
+viewActionState typ =
+    case typ of
+        A.STATUS_CHANGE _ ->
+            []
+
+        A.AUTHORIZE _ ->
+            []
+
+        A.START_TRANSACTION _ ->
+            []
+
+        A.STOP_TRANSACTION _ ->
+            []
+
+        A.CHARGE_PERIOD _ (Just { realInterval, speedupDilatedInterval, periodLeft, vehicleCharge, power, speedupIncreasedPower, powerOffered }) ->
+            [ Html.Styled.table [ class "table table-stripped" ]
+                [ thead []
                     [ tr []
-                        [ th [ attribute "scope" "col" ] [ text "Current" ]
-                        , th [ attribute "scope" "col" ] [ text "Type" ]
-                        , th [ attribute "scope" "col" ] [ text "Config" ]
-                        , th [ attribute "scope" "col" ] [ text "State" ]
+                        [ th [ attribute "scope" "col" ] [ text "Key" ]
+                        , th [ attribute "scope" "col" ] [ text "Value" ]
+                        , th [ attribute "scope" "col" ] [ text "Unit" ]
                         ]
                     ]
                 , tbody [] <|
-                    List.indexedMap
-                        (\ind a ->
-                            tr []
-                                [ td []
-                                    [ text <|
-                                        if ind == instrInd then
-                                            "*"
-
-                                        else
-                                            ""
-                                    ]
-                                , td [] [ text <| A.humanString a.typ ]
-                                , td [] [ text "-" ]
-                                , td [] [ text "-" ]
-                                ]
-                        )
-                        batch.actions
+                    [ tr []
+                        [ td [] [ text "Period Left" ]
+                        , td [] [ text <| String.fromInt periodLeft ]
+                        , td [] [ text "s" ]
+                        ]
+                    , tr []
+                        [ td [] [ text "Vehicle Charge" ]
+                        , td [] [ text <| (roundFloat 2 >> String.fromFloat) vehicleCharge ]
+                        , td [] [ text "Wh" ]
+                        ]
+                    , tr []
+                        [ td [] [ text "Update Interval (s)" ]
+                        , td [] [ text <| String.fromInt realInterval ]
+                        , td [] [ text "s" ]
+                        ]
+                    , tr []
+                        [ td [] [ text "Time-dilated (speedup) interval (s)" ]
+                        , td [] [ text <| (roundFloat 2 >> String.fromFloat) speedupDilatedInterval ]
+                        , td [] [ text "s" ]
+                        ]
+                    , tr []
+                        [ td [] [ text "Charging Power" ]
+                        , td [] [ text <| String.fromInt power ]
+                        , td [] [ text "W" ]
+                        ]
+                    , tr []
+                        [ td [] [ text "Speedup Increased Charging Power" ]
+                        , td [] [ text <| (roundFloat 2 >> String.fromFloat) speedupIncreasedPower ]
+                        , td [] [ text "W" ]
+                        ]
+                    , tr []
+                        [ td [] [ text "Charging Power Offered" ]
+                        , td [] [ text <| String.fromInt powerOffered ]
+                        , td [] [ text "W" ]
+                        ]
+                    ]
                 ]
+            ]
+
+        A.CHARGE_PERIOD _ Nothing ->
+            []
+
+        A.DELAY _ ->
+            []
+
+
+viewActionConfigSpeedup : A.CPModuleActionsActionTypeChargePeriodConfigSpeedup -> String
+viewActionConfigSpeedup speedup =
+    case speedup of
+        A.IncreasePower coeff ->
+            "speedup by increasing power x" ++ (roundFloat 2 >> String.fromFloat) coeff
+
+        A.TimeDilation coeff ->
+            "speedup by dilating time x" ++ (roundFloat 2 >> String.fromFloat) coeff
+
+        A.None ->
+            ""
 
 
 viewActionsWidgetBodyConfig : CPModuleActionsConfig -> List (Html Msg)
 viewActionsWidgetBodyConfig c =
-    [ text "YYY" ]
+    [ viewSpoiler False
+        [ text "Actions module config" ]
+        (case c.initialQueue of
+            Just batch ->
+                [ p [] [ text "Initial Queue" ]
+                , viewActionsQueue -1 batch.actions
+                ]
+
+            Nothing ->
+                []
+        )
+    ]
 
 
 viewHeartbeatWidget : CPModuleHeartbeat -> Html Msg
