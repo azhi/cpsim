@@ -238,12 +238,22 @@ listUpdateOnInd ind upd list =
 
 fillBgColor : Css.Style
 fillBgColor =
-    Css.backgroundColor <| Css.hex "77acfc"
+    Css.backgroundColor <| Css.hex "c2c2c2"
+
+
+fillBorderColor : Css.Style
+fillBorderColor =
+    Css.borderColor <| Css.hex "606060"
 
 
 ghostBgColor : Css.Style
 ghostBgColor =
-    Css.backgroundColor <| Css.hex "adcdfd"
+    Css.backgroundColor <| Css.hex "e6e6e6"
+
+
+ghostBorderColor : Css.Style
+ghostBorderColor =
+    Css.borderColor <| Css.hex "848484"
 
 
 view : Model -> Html Msg
@@ -329,16 +339,16 @@ actionItem maybeInsertDropInfo maybeReorderDropInfo ind action =
 
 realActionItemForm : Int -> CPModuleActionsAction -> Html Msg
 realActionItemForm =
-    actionItemForm (Css.borderStyle Css.solid) fillBgColor
+    actionItemForm (Css.borderStyle Css.solid) fillBorderColor fillBgColor
 
 
 ghostActionItemForm : Int -> CPModuleActionsAction -> Html Msg
 ghostActionItemForm =
-    actionItemForm (Css.borderStyle Css.dashed) ghostBgColor
+    actionItemForm (Css.borderStyle Css.dashed) ghostBorderColor ghostBgColor
 
 
-actionItemForm : Css.Style -> Css.Style -> Int -> CPModuleActionsAction -> Html Msg
-actionItemForm borderStyle bgColor ind action =
+actionItemForm : Css.Style -> Css.Style -> Css.Style -> Int -> CPModuleActionsAction -> Html Msg
+actionItemForm borderStyle borderColor bgColor ind action =
     let
         insertDroppable =
             DragDrop.droppable InsertDragDropMsg ind
@@ -356,7 +366,7 @@ actionItemForm borderStyle bgColor ind action =
                 |> List.map Html.Styled.Attributes.fromUnstyled
     in
     div
-        ([ class "my-3 p-1 border-primary border-3 rounded-3", css [ borderStyle, bgColor ] ]
+        ([ class "my-3 p-1 border-3 rounded-3", css [ borderStyle, borderColor, bgColor ] ]
             ++ dragDroppable
         )
         [ div [ class "d-flex" ]
@@ -474,7 +484,7 @@ viewToolboxAction title newEl =
             DragDrop.draggable InsertDragDropMsg newEl |> List.map Html.Styled.Attributes.fromUnstyled
     in
     div
-        ([ class "my-3 p-1 border border-primary border-3 rounded-3", css [ fillBgColor ] ]
+        ([ class "my-3 p-1 border border-3 rounded-3", css [ fillBgColor, Css.important fillBorderColor ] ]
             ++ draggable
         )
         [ span [] [ text title ]
@@ -489,7 +499,7 @@ viewToolboxTemplate title newEl =
             DragDrop.draggable InsertDragDropMsg newEl |> List.map Html.Styled.Attributes.fromUnstyled
     in
     div
-        ([ class "my-3 p-1 border border-primary border-3 rounded-3", css [ fillBgColor ] ]
+        ([ class "my-3 p-1 border border-3 rounded-3", css [ fillBgColor, Css.important fillBorderColor ] ]
             ++ draggable
         )
         [ span [] [ text title ]
