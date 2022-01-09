@@ -18,6 +18,7 @@ import Html.Styled.Events exposing (on, onCheck, onClick, onInput)
 import Http
 import Json.Decode as D
 import Json.Encode as E
+import Route
 import Session exposing (Session)
 
 
@@ -37,14 +38,12 @@ type alias Model =
     }
 
 
-type Status a
-    = Loading
-    | LoadingSlowly
-    | Loaded a
-    | Failed
 
-
-
+-- type Status a
+--     = Loading
+--     | LoadingSlowly
+--     | Loaded a
+--     | Failed
 -- DEFAULTS
 
 
@@ -179,8 +178,11 @@ update msg model =
         Submit ->
             ( model, submitLaunch model )
 
-        CPLaunched _ ->
-            -- TODO:
+        CPLaunched (Ok cp) ->
+            ( model, Route.pushUrl (.navKey (toSession model)) (Route.ChargePoints (Just cp.internalConfig.identity)) )
+
+        CPLaunched (Err _) ->
+            -- TODO: nice errors
             ( model, Cmd.none )
 
 

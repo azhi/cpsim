@@ -1,4 +1,4 @@
-module Page exposing (Page(..), view, viewErrors)
+module Page exposing (Page(..), loadingSpinner, view, viewErrors)
 
 import Css exposing (..)
 import Html.Styled exposing (..)
@@ -33,7 +33,7 @@ viewHeader : Page -> Html msg
 viewHeader page =
     header [ class "p-3 border-bottom" ]
         [ nav [ class "nav container-fluid mb-0" ]
-            [ navbarLink page Route.ChargePoints [ i [ class "fas fa-charging-station" ] [], text "Charge Points" ]
+            [ navbarLink page (Route.ChargePoints Nothing) [ i [ class "fas fa-charging-station" ] [], text "Charge Points" ]
             , navbarLink page Route.LaunchCP [ i [ class "fas fa-plus-circle" ] [], text "Launch new CP" ]
             ]
         ]
@@ -65,7 +65,7 @@ activeColorClass page route =
 isActive : Page -> Route -> Bool
 isActive page route =
     case ( page, route ) of
-        ( ChargePoints, Route.ChargePoints ) ->
+        ( ChargePoints, Route.ChargePoints _ ) ->
             True
 
         ( LaunchCP, Route.LaunchCP ) ->
@@ -73,6 +73,11 @@ isActive page route =
 
         _ ->
             False
+
+
+loadingSpinner : Html msg
+loadingSpinner =
+    i [ class "fas fas-spinner fa-spin" ] []
 
 
 {-| Render dismissable errors. We use this all over the place!

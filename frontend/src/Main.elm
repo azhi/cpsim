@@ -102,15 +102,21 @@ changeRouteTo maybeRoute model =
         session =
             toSession model
     in
-    case maybeRoute of
-        Nothing ->
+    case ( model, maybeRoute ) of
+        ( _, Nothing ) ->
             ( NotFound session, Cmd.none )
 
-        Just Route.ChargePoints ->
-            ChargePoints.init session
+        ( ChargePoints _, Just (Route.ChargePoints selectedCp) ) ->
+            ( model, Cmd.none )
+
+        ( _, Just (Route.ChargePoints selectedCp) ) ->
+            ChargePoints.init session selectedCp
                 |> updateWith ChargePoints GotChargePointsMsg
 
-        Just Route.LaunchCP ->
+        ( LaunchCP _, Just Route.LaunchCP ) ->
+            ( model, Cmd.none )
+
+        ( _, Just Route.LaunchCP ) ->
             LaunchCP.init session
                 |> updateWith LaunchCP GotLaunchCPMsg
 

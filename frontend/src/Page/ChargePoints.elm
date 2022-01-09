@@ -18,6 +18,8 @@ import Http
 import Iso8601
 import Json.Decode as D
 import Json.Encode as E
+import Page
+import Route
 import Session exposing (Session)
 import Time
 
@@ -29,8 +31,14 @@ import Time
 type alias Model =
     { session : Session
     , cps : List CP
-    , selectedCp : Maybe CP
+    , selectedCp : SelectedCP
     }
+
+
+type SelectedCP
+    = None
+    | Loading String
+    | Loaded CP
 
 
 
@@ -41,11 +49,25 @@ type alias Model =
 --     | Failed
 
 
-init : Session -> ( Model, Cmd Msg )
-init session =
-    ( { session = session, cps = [], selectedCp = Nothing }
-    , fetchCps
+init : Session -> Maybe String -> ( Model, Cmd Msg )
+init session routeSelectedCp =
+    let
+        ( selectedCp, fetchCpCmd ) =
+            maybeSelectRouteCp routeSelectedCp
+    in
+    ( { session = session, cps = [], selectedCp = selectedCp }
+    , Cmd.batch [ fetchCpCmd, fetchCps ]
     )
+
+
+maybeSelectRouteCp : Maybe String -> ( SelectedCP, Cmd Msg )
+maybeSelectRouteCp routeSelectedCp =
+    case routeSelectedCp of
+        Nothing ->
+            ( None, Cmd.none )
+
+        Just identity ->
+            ( Loading identity, fetchCp identity )
 
 
 
@@ -54,22 +76,38 @@ init session =
 
 type Msg
     = GotCPs (Result Http.Error (List CP))
+    | GotSelectedCP (Result Http.Error CP)
     | CPClicked CP
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        GotCPs result ->
-            case result of
-                Ok cps ->
-                    ( { model | cps = cps }, Cmd.none )
+        GotCPs (Ok cps) ->
+            ( { model | cps = cps }, Cmd.none )
 
-                Err _ ->
+        GotCPs (Err _) ->
+            -- TODO: nice errors
+            ( model, Cmd.none )
+
+        GotSelectedCP (Ok cp) ->
+            case model.selectedCp of
+                Loading identity ->
+                    if identity == cp.internalConfig.identity then
+                        ( { model | selectedCp = Loaded cp }, Cmd.none )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
                     ( model, Cmd.none )
 
+        GotSelectedCP (Err _) ->
+            -- TODO: nice errors
+            ( model, Cmd.none )
+
         CPClicked cp ->
-            ( { model | selectedCp = Just cp }, Cmd.none )
+            ( { model | selectedCp = Loaded cp }, Route.pushUrl (.navKey (toSession model)) (Route.ChargePoints (Just cp.internalConfig.identity)) )
 
 
 
@@ -90,6 +128,14 @@ fetchCps =
     Http.get
         { url = "/api/cp"
         , expect = Http.expectJson GotCPs (D.list cpDecoder)
+        }
+
+
+fetchCp : String -> Cmd Msg
+fetchCp identity =
+    Http.get
+        { url = "/api/cp/" ++ identity
+        , expect = Http.expectJson GotSelectedCP cpDecoder
         }
 
 
@@ -127,7 +173,7 @@ viewSidebarCps model =
         [ p [] [ text "No CPs" ] ]
 
 
-viewSidebarCp : Maybe CP -> CP -> Html Msg
+viewSidebarCp : SelectedCP -> CP -> Html Msg
 viewSidebarCp selectedCp cp =
     button [ class "list-group-item list-group-item-action py-3 lh-tight", classList [ ( "active", isSelectedCp selectedCp cp ) ], onClick (CPClicked cp) ]
         [ div [ class "w-100" ] [ strong [] [ text cp.internalConfig.identity ] ]
@@ -135,13 +181,16 @@ viewSidebarCp selectedCp cp =
         ]
 
 
-isSelectedCp : Maybe CP -> CP -> Bool
+isSelectedCp : SelectedCP -> CP -> Bool
 isSelectedCp selectedCp cp =
     case selectedCp of
-        Just scp ->
+        Loading identity ->
+            identity == cp.internalConfig.identity
+
+        Loaded scp ->
             scp.internalConfig.identity == cp.internalConfig.identity
 
-        Nothing ->
+        None ->
             False
 
 
@@ -210,10 +259,13 @@ viewHeartbeatShortStr state =
 maybeViewCp : Model -> Html Msg
 maybeViewCp model =
     case model.selectedCp of
-        Just cp ->
+        Loaded cp ->
             viewCp cp
 
-        Nothing ->
+        Loading _ ->
+            div [ class "p-3" ] [ Page.loadingSpinner ]
+
+        None ->
             div [ class "p-3" ] [ text "No CP Selected" ]
 
 
@@ -721,7 +773,7 @@ viewHeartbeatWidgetBodyState s =
 viewHeartbeatWidgetBodyConfig : CPModuleHeartbeatConfig -> List (Html Msg)
 viewHeartbeatWidgetBodyConfig c =
     [ viewSpoiler False
-        [ text "Status module config" ]
+        [ text "Heartbeat module config" ]
         [ Html.Styled.table [ class "table table-stripped" ]
             [ thead []
                 [ tr []

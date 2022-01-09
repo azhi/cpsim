@@ -1,10 +1,12 @@
-module Route exposing (Route(..), fromUrl, href, replaceUrl)
+module Route exposing (Route(..), fromUrl, href, pushUrl, replaceUrl)
 
 import Browser.Navigation as Nav
 import Html.Styled exposing (Attribute)
 import Html.Styled.Attributes as Attr
 import Url exposing (Url)
-import Url.Parser as Parser exposing ((</>), Parser, oneOf, s)
+import Url.Builder as B
+import Url.Parser as P exposing ((</>), (<?>), Parser, oneOf, s)
+import Url.Parser.Query as Q
 
 
 
@@ -12,15 +14,15 @@ import Url.Parser as Parser exposing ((</>), Parser, oneOf, s)
 
 
 type Route
-    = ChargePoints
+    = ChargePoints (Maybe String)
     | LaunchCP
 
 
 parser : Parser (Route -> a) a
 parser =
     oneOf
-        [ Parser.map ChargePoints Parser.top
-        , Parser.map LaunchCP (s "launch_cp")
+        [ P.map ChargePoints (P.top <?> Q.string "selectedCP")
+        , P.map LaunchCP (s "launch_cp")
         ]
 
 
@@ -38,9 +40,14 @@ replaceUrl key route =
     Nav.replaceUrl key (routeToString route)
 
 
+pushUrl : Nav.Key -> Route -> Cmd msg
+pushUrl key route =
+    Nav.pushUrl key (routeToString route)
+
+
 fromUrl : Url -> Maybe Route
 fromUrl url =
-    Parser.parse parser url
+    P.parse parser url
 
 
 
@@ -49,14 +56,12 @@ fromUrl url =
 
 routeToString : Route -> String
 routeToString page =
-    "/" ++ String.join "/" (routeToPieces page)
-
-
-routeToPieces : Route -> List String
-routeToPieces page =
     case page of
-        ChargePoints ->
-            []
+        ChargePoints (Just selectedCP) ->
+            B.absolute [] [ B.string "selectedCP" selectedCP ]
+
+        ChargePoints Nothing ->
+            B.absolute [] []
 
         LaunchCP ->
-            [ "launch_cp" ]
+            B.absolute [ "launch_cp" ] []
