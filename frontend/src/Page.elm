@@ -77,7 +77,7 @@ isActive page route =
 
 loadingSpinner : Html msg
 loadingSpinner =
-    i [ class "fas fas-spinner fa-spin" ] []
+    i [ class "fas fa-spinner fa-spin" ] []
 
 
 {-| Render dismissable errors. We use this all over the place!

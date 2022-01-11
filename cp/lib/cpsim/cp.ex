@@ -7,6 +7,7 @@ defmodule CPSIM.CP do
   defdelegate start_link(opts), to: CPSIM.CP.Core
   defdelegate child_spec(opts), to: CPSIM.CP.Core
 
+  def subscribe(identity), do: via(identity) |> CPSIM.CP.Core.add_subscriber()
   def stop(identity, reason \\ :normal), do: via(identity) |> CPSIM.CP.Core.stop(reason)
 
   def enqueue_action_batch(identity, action_batch),

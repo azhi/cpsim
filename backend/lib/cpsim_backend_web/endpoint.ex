@@ -10,7 +10,7 @@ defmodule CPSIM.BackendWeb.Endpoint do
     signing_salt: "CEuslhgv"
   ]
 
-  socket "/socket", CPSIM.BackendWeb.UserSocket,
+  socket "/api/socket", CPSIM.BackendWeb.UserSocket,
     websocket: true,
     longpoll: false
 

@@ -1,8 +1,9 @@
 defmodule CPSIM.BackendWeb.UserSocket do
   use Phoenix.Socket
+  require Logger
 
   ## Channels
-  # channel "room:*", CPSIM.BackendWeb.RoomChannel
+  channel "cp:*", CPSIM.BackendWeb.CPChannel
 
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After
@@ -17,6 +18,7 @@ defmodule CPSIM.BackendWeb.UserSocket do
   # performing token verification on connect.
   @impl true
   def connect(_params, socket, _connect_info) do
+    Logger.warn("CONNECT #{inspect(socket)}")
     {:ok, socket}
   end
 

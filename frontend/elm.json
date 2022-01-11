@@ -16,6 +16,7 @@
             "elm/url": "1.0.0",
             "elm-community/json-extra": "4.3.0",
             "norpan/elm-html5-drag-drop": "3.1.4",
+            "phollyer/elm-phoenix-websocket": "4.0.0",
             "rtfeldman/elm-css": "16.1.1",
             "rtfeldman/elm-iso8601-date-strings": "1.1.4"
         },

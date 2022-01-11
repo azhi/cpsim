@@ -19,6 +19,8 @@ import Iso8601
 import Json.Decode as D
 import Json.Encode as E
 import Page
+import Phoenix
+import Ports
 import Route
 import Session exposing (Session)
 import Time
@@ -30,6 +32,7 @@ import Time
 
 type alias Model =
     { session : Session
+    , phoenix : Phoenix.Model
     , cps : List CP
     , selectedCp : SelectedCP
     }
@@ -54,8 +57,11 @@ init session routeSelectedCp =
     let
         ( selectedCp, fetchCpCmd ) =
             maybeSelectRouteCp routeSelectedCp
+
+        phoenix =
+            Phoenix.init Ports.config
     in
-    ( { session = session, cps = [], selectedCp = selectedCp }
+    ( { session = session, phoenix = phoenix, cps = [], selectedCp = selectedCp }
     , Cmd.batch [ fetchCpCmd, fetchCps ]
     )
 
@@ -75,7 +81,8 @@ maybeSelectRouteCp routeSelectedCp =
 
 
 type Msg
-    = GotCPs (Result Http.Error (List CP))
+    = PhoenixMsg Phoenix.Msg
+    | GotCPs (Result Http.Error (List CP))
     | GotSelectedCP (Result Http.Error CP)
     | CPClicked CP
 
@@ -83,6 +90,18 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        PhoenixMsg subMsg ->
+            let
+                ( phoenix, phoenixCmd, phoenixMsg ) =
+                    Phoenix.update subMsg model.phoenix
+
+                _ =
+                    Debug.log "phoenixMsg" phoenixMsg
+            in
+            ( { model | phoenix = phoenix }
+            , Cmd.map PhoenixMsg phoenixCmd
+            )
+
         GotCPs (Ok cps) ->
             ( { model | cps = cps }, Cmd.none )
 
@@ -94,7 +113,17 @@ update msg model =
             case model.selectedCp of
                 Loading identity ->
                     if identity == cp.internalConfig.identity then
-                        ( { model | selectedCp = Loaded cp }, Cmd.none )
+                        let
+                            ( phoenix, phoenixCmd ) =
+                                Phoenix.join ("cp:" ++ identity) model.phoenix
+
+                            _ =
+                                Debug.log "newPhoenix" phoenix
+
+                            _ =
+                                Debug.log "newPhoenixCmd" phoenixCmd
+                        in
+                        ( { model | selectedCp = Loaded cp, phoenix = phoenix }, Cmd.map PhoenixMsg phoenixCmd )
 
                     else
                         ( model, Cmd.none )
@@ -115,8 +144,9 @@ update msg model =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.none
+subscriptions model =
+    Sub.map PhoenixMsg <|
+        Phoenix.subscriptions model.phoenix
 
 
 
