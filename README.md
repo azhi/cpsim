@@ -9,3 +9,16 @@ Consists of:
 * `frontend` - an Elm app that provides a web GUI for the phoenix backend.
 
 See READMEs in each component for more info.
+
+## Current Status
+
+Mostly holds together, but lacks some crucial features, like:
+
+* realtime updates for and on frontend
+* ability to enqueue new actions for existing Charge Point on frontend
+* ability to persist Charge Point state to DB - as of now, Charge Point state only exists inside active genserver
+* Dockerfiles and deploy instructions
+
+### Future work
+
+Throughout the code, there are a lot of TODOs pointing at future improvements.
